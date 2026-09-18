@@ -4,8 +4,7 @@ stub fetcher (specs/slice-3.md, Approach: "the fetcher is injected").
 """
 from __future__ import annotations
 
-from ingest.backfill import backfill_one, plan_jobs, run_backfill
-from ingest.load import upsert_site
+from ingest.backfill import backfill_one, plan_jobs, run_backfill, upsert_site
 from ingest.openmeteo import Metadata
 from ingest.sites import SITES
 
