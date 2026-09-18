@@ -6,16 +6,18 @@ Pick a point on a map. See what a solar or wind farm there would have generated,
 hour by hour, over ten years of real weather — and how reliable it would
 actually have been.
 
-**Status: slice 1 of 6.** The spine works — TimescaleDB up, a site-year
-ingested, hypertable chunked, `time_bucket` rolling up. See [PLAN.md](PLAN.md)
-for the build order and the decisions behind it.
+**Status: slice 2 of 6.** The spine works, and weather now turns into
+generation: PV and wind capacity-factor models, each a single SQL function
+generated from cited Python constants. See [PLAN.md](PLAN.md) for the build
+order and [specs/slice-2.md](specs/slice-2.md) for this slice's plan.
 
 ## Running it
 
 ```sh
 docker compose up -d
-python -m ingest.load --year 2024
+.venv/bin/python -m ingest.load --year 2024
 docker compose exec -T db psql -U postgres -d resource -f /dev/stdin < db/verify.sql
+.venv/bin/python -m pytest   # model tests, against the running DB
 ```
 
 ## Data & attribution
@@ -26,5 +28,30 @@ archive, licensed **CC BY 4.0**. Generation figures in this project are
 PLAN.md. Open-Meteo's free tier is non-commercial and offers no uptime
 guarantee.
 
-Every physical coefficient used here is cited, and the README will keep what is
-verified separate from what is assumed.
+## The models — verified vs. assumed
+
+PV and wind generation are each a single SQL function, generated from the
+constants in [`models/constants.py`](models/constants.py). Full citations and
+confidence ratings: [docs/research/2026-09-18-model-coefficients.md](docs/research/2026-09-18-model-coefficients.md).
+
+| Constant | Value | Status | Source |
+|---|---|---|---|
+| `R_SPECIFIC` (dry air) | 287.058 J/(kg·K) | **verified** | ICAO/ISO 2533 Standard Atmosphere |
+| `RHO_STANDARD` | 1.2250 kg/m³ | **verified** | ICAO/ISO 2533 Standard Atmosphere |
+| Turbine rated power, curve | 3,370 kW, 50-point curve | **verified** | IEA 3.4 MW/130 RWT, NREL/TP-5000-73492 (BSD-3-Clause) |
+| `NOCT` | 45.0 °C | **assumed** | typical crystalline-silicon value; real modules run 42–48 °C, per-datasheet |
+| `GAMMA` (temp. coefficient) | −0.004 /°C | **assumed** | common datasheet convention (−0.3 to −0.5%/°C range); no single primary table |
+
+Known limitations, stated rather than fixed:
+
+- The cell-temperature formula (`T_air + (NOCT−20)/800·POA`) is NREL's full SAM
+  model with the wind-speed and efficiency terms dropped, so it's less accurate
+  than that model's ±2–3 °C, especially in windy conditions.
+- `surface_pressure` is used for air density at 100 m hub height; true density
+  there is ~1.2% lower.
+- Density correction scales *power* by ρ/ρ₀ (as PLAN.md specifies). IEC
+  61400-12-1 instead normalises *wind speed* by (ρ/ρ₀)^(1/3) for pitch-regulated
+  turbines — not yet reconciled with the standard; see specs/slice-2.md.
+- The published turbine curve reports power below its own stated 4 m/s cut-in
+  (from 3 m/s) and stops abruptly at 25 m/s cut-out. We use it verbatim rather
+  than override NREL's own numbers.
