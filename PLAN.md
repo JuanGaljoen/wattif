@@ -146,14 +146,14 @@ no Timescale Toolkit — plain `timescale/timescaledb:2.x-pg17` is enough.
 
 ## Build order
 
-1. **Compose up, one site, one year.** Hypertable, a `time_bucket` query. Proves
+1. **DONE — Compose up, one site, one year.** Hypertable, a `time_bucket` query. Proves
    the spine.
-2. **Models + tests.** Pure functions, coefficients cited, **azimuth and km/h
+2. **DONE — Models + tests.** Pure functions, coefficients cited, **azimuth and km/h
    assertions**.
-3. **Backfill.** CSV → `COPY`, resumable per `(site, year)`, re-runnable safely
+3. **DONE — Backfill.** CSV → `COPY`, resumable per `(site, year)`, re-runnable safely
    (**idempotency is what will actually break — test it**). Seed 6 sites.
-4. **Daily cagg + compression.** Over the capacity-factor expression.
-5. **FastAPI + frontend.** Map, generation chart, reliability view. Opens on a
+4. **DONE — Daily cagg + compression.** Over the capacity-factor expression.
+5. **NEXT — FastAPI + frontend.** Map, generation chart, reliability view. Opens on a
    seeded site, never an empty shell.
 6. **Package it.** Caddy in the compose file, seed dump published to a GitHub
    Release, README with the GIF, the measured numbers, and verified-vs-assumed
@@ -209,11 +209,35 @@ your region. Additive, never load-bearing.
 
 ## Still open
 
-- [ ] **What does "reliable" mean?** The tagline's strongest claim. P50/P90 of
-      annual yield is conventional but a weak distribution at n=10. *Longest
-      lull* — worst 24h, worst week, hours per year below 10% output — is more
-      interesting and is what a hypertable is uniquely good at. Product decision;
-      needed before slice 4.
-- [ ] Which 6 sites?
-- [ ] Which published turbine curve?
-- [ ] Name the project.
+- [ ] **Reliability view design** — the metrics are decided and measured
+      (below); how they're *presented* is a slice-5 question.
+- [ ] **Hourly metrics are too slow to serve live.** The two hourly
+      reliability queries take ~2m21s over 526k rows. Fine from a script,
+      not behind an HTTP request. `docs/adr/0005` names the fix's shape:
+      materialise hourly capacity factor the way `daily_cf` materialises
+      daily. Decide at slice 5's Understand.
+
+## Settled since this plan was written
+
+- **What does "reliable" mean?** — **longest lull, hourly-led**: worst
+  rolling 24h, worst rolling week, hours/year below 10% output, with P50/P90
+  annual alongside. Measured in `db/reliability.sql`; results in the README.
+  PLAN's own objection was right — the solar P50/P90 spread is ~2%, barely
+  above sampling noise at n=10.
+- **Which 6 sites?** — six South African sites, all `Africa/Johannesburg`.
+  One shared timezone was deliberate: it's what makes the cagg's constant
+  timezone literal legal (`docs/adr/0001`). See `ingest/sites.py`.
+- **Which published turbine curve?** — IEA 3.4 MW / 130 RWT, hub 110 m
+  (closest match to our `wind_speed_100m`), NREL/TP-5000-73492, BSD-3-Clause.
+  Vendored at `data/IEA_Reference_3.4MW_130.csv`.
+- **Name the project.** — wattif.
+
+## Superseded
+
+- **PLAN's schema section says "the daily cagg groups on `local_date`".** It
+  cannot: a continuous aggregate must bucket on the hypertable's time column.
+  Superseded by `docs/adr/0001`; resolved in slice 4 by a constant timezone
+  literal. The section's other two decisions (cagg stores capacity factor,
+  cagg is over the generation expression) still stand.
+- **"`CREATE OR REPLACE` means the DB can never disagree with the
+  constants."** False — it's signature-scoped. Superseded by `docs/adr/0004`.
