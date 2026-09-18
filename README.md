@@ -6,18 +6,36 @@ Pick a point on a map. See what a solar or wind farm there would have generated,
 hour by hour, over ten years of real weather — and how reliable it would
 actually have been.
 
-**Status: slice 2 of 6.** The spine works, and weather now turns into
-generation: PV and wind capacity-factor models, each a single SQL function
-generated from cited Python constants. See [PLAN.md](PLAN.md) for the build
-order and [specs/slice-2.md](specs/slice-2.md) for this slice's plan.
+**Status: slice 3 of 6.** Six South African sites, ten years each, fully
+backfilled: **526,032 hourly rows**. Resumable and idempotent — the real run
+crashed twice on transient upstream timeouts and picked up cleanly both
+times, no duplicates, no manual cleanup. See [PLAN.md](PLAN.md) for the build
+order and [specs/slice-3.md](specs/slice-3.md) for this slice's plan.
+
+## The six sites
+
+All `Africa/Johannesburg` — one shared timezone, deliberately: it keeps
+slice 4's continuous aggregate to a single constant timezone literal
+(see [`docs/adr/0001`](docs/adr/0001-cagg-cannot-group-on-local-date.md)).
+
+| Site | Lat | Lon | Profile |
+|---|---|---|---|
+| Karoo | -32.25 | 22.55 | solar |
+| Upington | -28.45 | 21.26 | solar++ |
+| Cape West Coast | -32.80 | 18.15 | wind |
+| Port Elizabeth | -33.96 | 25.60 | wind |
+| Free State | -28.50 | 26.80 | both |
+| Limpopo | -23.90 | 29.45 | solar |
 
 ## Running it
 
 ```sh
 docker compose up -d
-.venv/bin/python -m ingest.load --year 2024
+.venv/bin/python -m ingest.load                 # all 6 sites, 2016-2025
+.venv/bin/python -m ingest.load --year 2024      # one year, all sites
+.venv/bin/python -m ingest.load --site Karoo     # one site, all years
 docker compose exec -T db psql -U postgres -d resource -f /dev/stdin < db/verify.sql
-.venv/bin/python -m pytest   # model tests, against the running DB
+.venv/bin/python -m pytest   # tests, against the running DB
 ```
 
 ## Data & attribution

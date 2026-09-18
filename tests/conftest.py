@@ -31,3 +31,22 @@ def db():
 def cur(db):
     with db.cursor() as cur:
         yield cur
+
+
+@pytest.fixture
+def tx():
+    """A rollback-isolated cursor on its own (non-autocommit) connection.
+
+    Backfill tests write real rows -- weather_hour, site, ingest_job -- and
+    must never pollute the dev database that holds Karoo 2024. This only
+    works because ingest/backfill.py never commits internally
+    (specs/slice-3.md, Approach): everything this cursor does is undone on
+    teardown, whether the test passed or failed.
+    """
+    conn = psycopg.connect(DSN)  # autocommit=False (default)
+    try:
+        with conn.cursor() as cur:
+            yield cur
+    finally:
+        conn.rollback()
+        conn.close()

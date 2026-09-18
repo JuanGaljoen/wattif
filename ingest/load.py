@@ -1,7 +1,13 @@
-"""Slice 1: ingest one site-year into the hypertable, then prove it with a
-time_bucket query.
+"""CLI: backfill every pending (site, year), or a subset via flags.
 
-    python -m ingest.load --year 2024
+    python -m ingest.load                  # all 6 sites, 2016-2025
+    python -m ingest.load --year 2024      # one year, all sites
+    python -m ingest.load --site Karoo     # one site, all years
+
+A thin wrapper over ingest.backfill -- plan_jobs/backfill_one carry the
+actual logic and are tested without the network (tests/test_backfill.py).
+Commits per site-year, not per run: a crash costs at most one year
+(db/schema.sql, ingest_job).
 """
 from __future__ import annotations
 
@@ -10,83 +16,51 @@ import os
 
 import psycopg
 
-from .openmeteo import VARIABLES, SiteSpec, fetch_csv, parse, rows_for_copy
+# Re-exported for backward compatibility: upsert_site, load and COPY_COLUMNS
+# used to live here (slice 1); they moved to backfill.py to break a circular
+# import once the CLI itself needed to depend on backfill (slice 3, CP3).
+from .backfill import (  # noqa: F401 -- some re-exported, see module docstring
+    COPY_COLUMNS,
+    backfill_one,
+    load,
+    plan_jobs,
+    run_backfill,
+    upsert_site,
+)
+from .sites import SITES, YEARS
 
 DSN = os.environ.get(
     "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/resource"
 )
 
-# Slice 1 seeds one site. Karoo: high irradiance, southern hemisphere, so it
-# exercises the azimuth convention rather than hiding it.
-KAROO = SiteSpec(
-    name="Karoo", latitude=-32.25, longitude=22.55, tilt_deg=32.0, azimuth_deg=180.0
-)
-
-COPY_COLUMNS = ["site_id", "ts", "local_date", *VARIABLES]
-
-
-def upsert_site(cur, site: SiteSpec, meta) -> int:
-    cur.execute(
-        """
-        INSERT INTO site (name, latitude, longitude, elevation_m, timezone,
-                          utc_offset_seconds, tilt_deg, azimuth_deg)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        ON CONFLICT (name) DO UPDATE SET
-            elevation_m        = EXCLUDED.elevation_m,
-            utc_offset_seconds = EXCLUDED.utc_offset_seconds
-        RETURNING id
-        """,
-        (site.name, site.latitude, site.longitude, meta.elevation_m,
-         meta.timezone, meta.utc_offset_seconds, site.tilt_deg, site.azimuth_deg),
-    )
-    return cur.fetchone()[0]
-
-
-def load(cur, rows: list[tuple]) -> int:
-    """COPY into a temp table, then move across ignoring conflicts.
-
-    COPY cannot do ON CONFLICT, and re-running a (site, year) must be safe --
-    that is the whole idempotency story for the backfill.
-    """
-    cur.execute(
-        "CREATE TEMP TABLE stage (LIKE weather_hour INCLUDING DEFAULTS) ON COMMIT DROP"
-    )
-    cols = ", ".join(COPY_COLUMNS)
-    with cur.copy(f"COPY stage ({cols}) FROM STDIN") as copy:
-        for row in rows:
-            copy.write_row(row)
-    cur.execute(
-        f"INSERT INTO weather_hour ({cols}) SELECT {cols} FROM stage "
-        f"ON CONFLICT (site_id, ts) DO NOTHING"
-    )
-    return cur.rowcount
+# Backward-compat alias -- tests/test_pv.py pins the azimuth trap against
+# this name (slice 2, before the multi-site registry existed).
+KAROO = SITES[0]
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--year", type=int, default=2024)
+    ap.add_argument("--year", type=int, help="restrict to one year")
+    ap.add_argument("--site", help="restrict to one site by name")
     args = ap.parse_args()
 
-    print(f"fetching {KAROO.name} {args.year} ...", flush=True)
-    meta, data = parse(fetch_csv(KAROO, args.year))
-    print(f"  {len(data)} hourly rows, elevation {meta.elevation_m} m, "
-          f"utc_offset {meta.utc_offset_seconds}s")
+    sites = [s for s in SITES if s.name == args.site] if args.site else SITES
+    if args.site and not sites:
+        raise SystemExit(f"no such site: {args.site!r}")
+    years = [args.year] if args.year else YEARS
 
     with psycopg.connect(DSN) as conn, conn.cursor() as cur:
-        site_id = upsert_site(cur, KAROO, meta)
-        cur.execute(
-            "INSERT INTO ingest_job (site_id, year, status) VALUES (%s, %s, 'running') "
-            "ON CONFLICT (site_id, year) DO UPDATE SET status = 'running', error = NULL",
-            (site_id, args.year),
-        )
-        inserted = load(cur, rows_for_copy(site_id, meta, data))
-        cur.execute(
-            "UPDATE ingest_job SET status='done', rows=%s, fetched_at=now() "
-            "WHERE site_id=%s AND year=%s",
-            (inserted, site_id, args.year),
-        )
-        conn.commit()
-        print(f"  inserted {inserted} rows (re-runs insert 0 -- that is correct)")
+        pending = len(plan_jobs(cur, sites, years))
+        print(f"{pending} site-year(s) pending", flush=True)
+        if pending == 0:
+            print("nothing pending")
+            return
+
+        def on_done(site, year, inserted):
+            print(f"  {site.name} {year} ... inserted {inserted} rows")
+            conn.commit()
+
+        run_backfill(cur, sites, years, on_done=on_done)
 
 
 if __name__ == "__main__":
