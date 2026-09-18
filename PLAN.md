@@ -1,7 +1,9 @@
-# Renewable resource explorer
+# wattif
 
 Pick a point on a map. See what a solar or wind farm there would have generated,
 hour by hour, over ten years of real weather — and how reliable it would have been.
+
+*Watt if you'd built it there?*
 
 **Goal.** A small, finished, good-looking product on a real time-series stack:
 Python, TimescaleDB, Postgres. One question, answered well.
