@@ -6,11 +6,11 @@ Pick a point on a map. See what a solar or wind farm there would have generated,
 hour by hour, over ten years of real weather — and how reliable it would
 actually have been.
 
-**Status: slice 3 of 6.** Six South African sites, ten years each, fully
-backfilled: **526,032 hourly rows**. Resumable and idempotent — the real run
-crashed twice on transient upstream timeouts and picked up cleanly both
-times, no duplicates, no manual cleanup. See [PLAN.md](PLAN.md) for the build
-order and [specs/slice-3.md](specs/slice-3.md) for this slice's plan.
+**Status: slice 4 of 6.** Six South African sites, ten years each:
+**526,032 hourly rows**, rolled up into a daily continuous aggregate
+(**21,918 rows**) over the generation expression, with the hypertable
+compressed **74 MB → 23 MB (3.2×)**. See [PLAN.md](PLAN.md) for the build
+order and [specs/slice-4.md](specs/slice-4.md) for this slice's plan.
 
 ## The six sites
 
@@ -35,7 +35,47 @@ docker compose up -d
 .venv/bin/python -m ingest.load --year 2024      # one year, all sites
 .venv/bin/python -m ingest.load --site Karoo     # one site, all years
 docker compose exec -T db psql -U postgres -d resource -f /dev/stdin < db/verify.sql
+docker compose exec -T db psql -U postgres -d resource -f /dev/stdin < db/reliability.sql
 .venv/bin/python -m pytest   # tests, against the running DB
+```
+
+## Reliability — what it means here
+
+"How reliable would it actually have been" is answered as **longest lull**,
+not just annual averages. Ten years of hourly data supports that far better
+than it supports annual percentiles: P50/P90 at n=10 years is a distribution
+of ten numbers, and the solar spread turns out to be ~2% — barely above
+sampling noise. The lull metrics use all 87,672 hours per site.
+
+Measured over 2016–2025 ([`db/reliability.sql`](db/reliability.sql)):
+
+| Metric | Solar | Wind |
+|---|---|---|
+| Worst rolling 24 h | 0.014 – 0.046 | **0.000** at four sites |
+| Worst rolling 7 days | 0.087 – 0.136 | 0.007 – 0.080 |
+| Hours/year below 10% output | 750 – 912 *(daylight only)* | 2,065 – 4,617 |
+
+The story those numbers tell: **wind has far deeper sustained lulls than
+solar.** Solar is reliably cyclical — it comes back every morning. Wind can
+be becalmed for a week.
+
+The PV "hours below 10%" figure counts **daylight hours only**. Counting all
+hours would include every night hour and measure darkness rather than
+reliability.
+
+Note on P90: in energy it means the yield *exceeded* in 90% of years — the
+10th percentile of the distribution, `percentile_cont(0.1)`, not `0.9`.
+
+## Operational note
+
+The cagg's refresh policy keeps a moving recent window current. It does
+**not** re-materialise history, so after changing a coefficient in
+[`models/constants.py`](models/constants.py) the aggregate keeps serving
+values computed by the old function until a deliberate full-range refresh:
+
+```python
+from timescale import refresh_daily_cf
+refresh_daily_cf(conn)          # NULL, NULL = everything
 ```
 
 ## Data & attribution

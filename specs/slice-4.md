@@ -146,7 +146,7 @@ drop-and-recreate needed. This goes in the README as an operational rule.
       and the regression that matters: backfill idempotency after compression.
       files: `timescale/compression.py`, `timescale/__init__.py`,
       `tests/test_timescale.py`
-- [ ] **CP3 — Reliability foundation + docs.** Representative queries proving
+- [x] **CP3 — Reliability foundation + docs.** Representative queries proving
       all four metric kinds work; verify.sql and README updated.
       files: `db/reliability.sql`, `db/verify.sql`, `README.md`
 
