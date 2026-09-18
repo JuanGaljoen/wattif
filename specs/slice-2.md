@@ -92,7 +92,7 @@ Two assumptions to state in the README, not to fix here:
 - [x] **CP2 — Wind.** Adds only curve loading and interpolation.
       files: `data/IEA_Reference_3.4MW_130.csv` (vendored + BSD-3 notice),
       `data/LICENSE-NREL`, `models/curve.py`, `models/ddl.py`, `tests/test_wind.py`
-- [ ] **CP3 — Fold in slice 1's leftovers.** `CLAUDE.md` (untracked since slice 1),
+- [x] **CP3 — Fold in slice 1's leftovers.** `CLAUDE.md` (untracked since slice 1),
       `docs/research/` note, README verified-vs-assumed table.
 
 ## Tests — seams and what each pins
