@@ -88,9 +88,34 @@ hand-write a signature twice. See [`docs/adr/0004`](docs/adr/0004-create-or-repl
 `docs/adr/` now holds this project's dated decisions and lessons — check it
 during Recall alongside PLAN.md.
 
+## The aggregate layer (slice 4)
+
+`daily_cf(site_id, day, pv_cf, wind_cf, hours)` is a continuous aggregate over
+the **generation expression**, bucketed on a **constant** timezone literal
+(`Africa/Johannesburg`). Constant only because all six sites share one
+timezone — **a site in another timezone invalidates this design**, not just
+this query (see [`docs/adr/0001`](docs/adr/0001-cagg-cannot-group-on-local-date.md)).
+
+**Querying rule: evaluate the physics once per row, never per window frame.**
+A moving-window `avg()` over floats can't use inverse transitions, so calling
+a model function inside the frame recomputes it 24× per row — 8 minutes
+versus seconds. Window over a CTE marked `MATERIALIZED` (the keyword is
+load-bearing; without it PG inlines it straight back).
+See [`docs/adr/0005`](docs/adr/0005-evaluate-the-physics-once-per-row-never-per-window-frame.md).
+
+A cagg has **no `OR REPLACE`**, so `daily_cf` carries a version marker as a
+view comment and `apply_timescale` refuses to run against a mismatch. Bump
+`CAGG_VERSION` whenever the SELECT changes.
+
+**After changing a model coefficient**, the cagg serves stale values until an
+explicit full-range `refresh_daily_cf(conn)` — the refresh policy only covers
+a moving recent window.
+
 ## Known gaps
 
-- [ ] **PLAN.md's "cagg groups on `local_date`" design is invalid** — verified
-      live, blocks slice 4. See [`docs/adr/0001`](docs/adr/0001-cagg-cannot-group-on-local-date.md).
+- [x] ~~PLAN.md's "cagg groups on `local_date`" design is invalid~~ — resolved
+      in slice 4 by the constant timezone literal, available because all six
+      sites share one timezone. PLAN.md:129-131 remains formally superseded by
+      [`docs/adr/0001`](docs/adr/0001-cagg-cannot-group-on-local-date.md).
 - [x] ~~`ingest_job.rows` records rows inserted *this run*, not rows held~~ —
       fixed in slice 3 (`ingest/backfill.py`, `backfill_one`).
