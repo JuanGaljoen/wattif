@@ -142,7 +142,7 @@ drop-and-recreate needed. This goes in the README as an operational rule.
       materialised and checked against direct computation.
       files: `timescale/__init__.py`, `timescale/cagg.py`,
       `tests/test_timescale.py`
-- [ ] **CP2 — Compression + policies.** Compression settings, both policies,
+- [x] **CP2 — Compression + policies.** Compression settings, both policies,
       and the regression that matters: backfill idempotency after compression.
       files: `timescale/compression.py`, `timescale/__init__.py`,
       `tests/test_timescale.py`

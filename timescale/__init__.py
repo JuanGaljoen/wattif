@@ -11,8 +11,9 @@ Public interface:
 from __future__ import annotations
 
 from .cagg import CAGG_NAME, ensure_cagg
+from .compression import compress_all, ensure_compression, ensure_refresh_policy
 
-__all__ = ["apply_timescale", "refresh_daily_cf"]
+__all__ = ["apply_timescale", "refresh_daily_cf", "compress_all"]
 
 
 def apply_timescale(cur) -> None:
@@ -20,8 +21,14 @@ def apply_timescale(cur) -> None:
 
     Never commits -- the caller owns the transaction, matching
     ingest/backfill.py (specs/slice-3.md) so tests can roll back.
+
+    Creates structures and policies only; the two operations that actually
+    move data -- refresh_daily_cf and compress_all -- are separate because
+    neither can run inside a transaction block.
     """
     ensure_cagg(cur)
+    ensure_compression(cur)
+    ensure_refresh_policy(cur, CAGG_NAME)
 
 
 def refresh_daily_cf(conn, start=None, end=None) -> None:
