@@ -39,7 +39,14 @@ def test_cagg_row_count(db):
 def test_every_bucket_has_24_hours(db):
     """Timezone-aware bucketing aligns local days with the data span, so a
     bucket with anything but 24 hours means the bucketing or the span is not
-    what we think."""
+    what we think.
+
+    This asserts a property of the CURRENT dataset (complete local years
+    2016-2025), not a permanent invariant. Backfilling a partial year will
+    fail it with a legitimately partial final day -- that's information
+    worth surfacing, not necessarily a fault. Check what changed before
+    assuming the bucketing broke.
+    """
     with db.cursor() as cur:
         cur.execute(f"SELECT count(*) FROM {CAGG_NAME} WHERE hours <> 24")
         (bad,) = cur.fetchone()

@@ -18,9 +18,14 @@ HYPERTABLE = "weather_hour"
 # in this project is historical, so effectively all of it compresses.
 COMPRESS_AFTER = "30 days"
 
-# The cagg refresh policy's moving window. It deliberately does NOT
-# re-materialise history -- after a model coefficient changes, the full-range
-# refresh is an explicit act (timescale.refresh_daily_cf).
+# The cagg refresh policy's moving window. Judgement calls, like
+# COMPRESS_AFTER above -- not sourced constants. 90 days is comfortably wider
+# than any plausible late-arriving correction to ERA5 reanalysis; end_offset
+# of 1 day avoids rebuilding a day that may still be filling.
+#
+# It deliberately does NOT re-materialise history -- after a model
+# coefficient changes, the full-range refresh is an explicit act
+# (timescale.refresh_daily_cf).
 REFRESH_START_OFFSET = "90 days"
 REFRESH_END_OFFSET = "1 day"
 REFRESH_INTERVAL = "1 day"

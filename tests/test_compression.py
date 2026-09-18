@@ -8,7 +8,20 @@ vacuously against uncompressed data.
 """
 from __future__ import annotations
 
+from ingest.backfill import load
+
 HYPERTABLE = "weather_hour"
+
+COMPRESSED_ROWS = """
+    SELECT w.site_id, w.ts, w.local_date, w.global_tilted_irradiance,
+           w.shortwave_radiation, w.direct_radiation, w.diffuse_radiation,
+           w.direct_normal_irradiance, w.temperature_2m, w.wind_speed_100m,
+           w.wind_direction_100m, w.surface_pressure
+    FROM timescaledb_information.chunks c
+    JOIN weather_hour w ON w.ts >= c.range_start AND w.ts < c.range_end
+    WHERE c.hypertable_name = %s AND c.is_compressed
+    LIMIT %s
+"""
 
 
 def test_compression_settings_applied(db):
@@ -87,3 +100,28 @@ def test_backfill_idempotency_survives_compression(tx):
         (site_id, ts),
     )
     assert tx.fetchone()[0] == original_temp  # not overwritten by -999
+
+
+def test_production_load_path_is_idempotent_on_compressed_chunks(tx):
+    """The REAL ingest mechanism against compressed data.
+
+    The test above re-inserts a single row directly. Production doesn't do
+    that -- ingest.backfill.load COPYs into a temp stage and then
+    INSERT ... SELECT ... ON CONFLICT DO NOTHING. That's a different code
+    path, and it's the one slice 3's resumability actually depends on, so it
+    gets its own check against compressed chunks.
+    """
+    tx.execute(COMPRESSED_ROWS, (HYPERTABLE, 100))
+    rows = tx.fetchall()
+    assert len(rows) == 100, "need compressed rows to make this meaningful"
+
+    tx.execute("SELECT count(*) FROM weather_hour")
+    (before,) = tx.fetchone()
+
+    inserted = load(tx, rows)  # COPY -> stage -> INSERT ON CONFLICT DO NOTHING
+
+    tx.execute("SELECT count(*) FROM weather_hour")
+    (after,) = tx.fetchone()
+
+    assert inserted == 0
+    assert after == before

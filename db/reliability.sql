@@ -44,6 +44,9 @@ WHERE w24.n = 24          -- drop the partial windows at each site's start
 GROUP BY s.name ORDER BY s.name;
 
 \echo ''
+-- The 10% threshold is PLAN.md's, from the "Still open / what does reliable
+-- mean" note: "hours per year below 10% output". Not a derived or sourced
+-- figure -- a stated product choice.
 \echo '== 2. HOURS PER YEAR BELOW 10% OUTPUT  (hourly, weather_hour) =='
 \echo '   Wind counts all hours. PV counts DAYLIGHT hours only -- otherwise'
 \echo '   every night hour qualifies and the metric just measures darkness.'
