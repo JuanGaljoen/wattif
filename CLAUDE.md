@@ -79,6 +79,12 @@ constants and applied idempotently at runtime** — never edited by hand, never
 duplicated. See [`docs/adr/0002`](docs/adr/0002-generation-models-as-generated-sql-functions.md)
 for why, and `models/` for the pattern to extend when a third model is added.
 
+**`apply_models` creates the canonical function, then drops every other
+overload of that name** — `CREATE OR REPLACE` alone is signature-scoped and
+silently leaves an old signature behind, which `real` columns then bind to in
+preference. Declare each function's params once in `models/ddl.py`; never
+hand-write a signature twice. See [`docs/adr/0004`](docs/adr/0004-create-or-replace-does-not-prevent-stale-overloads.md).
+
 `docs/adr/` now holds this project's dated decisions and lessons — check it
 during Recall alongside PLAN.md.
 

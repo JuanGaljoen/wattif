@@ -1,7 +1,11 @@
 # 2. Generation models are generated SQL functions, not Python functions
 
 Date: 2026-09-18
-Status: accepted
+Status: accepted — but its "the database can never hold a definition that
+disagrees with the constants" claim is **superseded by
+[ADR 0004](0004-create-or-replace-does-not-prevent-stale-overloads.md)**:
+`CREATE OR REPLACE` is signature-scoped and leaves stale overloads behind.
+The design below otherwise stands.
 
 ## Context
 
