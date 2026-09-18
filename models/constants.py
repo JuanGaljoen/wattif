@@ -29,3 +29,11 @@ RHO_STANDARD = 1.2250
 RATED_KW = 3370.0
 CUT_IN_MS = 3.0
 CUT_OUT_MS = 25.0
+
+# -- Unit conversions (exact, not physical assumptions) ----------------------
+
+# Open-Meteo's wind_speed_100m arrives in km/h -- the km/h trap this slice
+# guards against. NOT a coefficient to cite; a definitional conversion.
+KMH_TO_MS = 3.6
+HPA_TO_PA = 100.0
+CELSIUS_TO_KELVIN = 273.15
