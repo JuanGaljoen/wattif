@@ -48,9 +48,12 @@ def load(cur, rows: list[tuple]) -> int:
     COPY cannot do ON CONFLICT, and re-running a (site, year) must be safe --
     that is the whole idempotency story for the backfill.
     """
-    cur.execute(
-        "CREATE TEMP TABLE stage (LIKE weather_hour INCLUDING DEFAULTS) ON COMMIT DROP"
-    )
+    # DROP IF EXISTS, not ON COMMIT DROP: a resumable backfill may call this
+    # more than once per commit (run_backfill batches commits per site-year,
+    # and tests run entirely inside one rolled-back transaction), so the
+    # table can't rely on a commit happening between calls.
+    cur.execute("DROP TABLE IF EXISTS stage")
+    cur.execute("CREATE TEMP TABLE stage (LIKE weather_hour INCLUDING DEFAULTS)")
     cols = ", ".join(COPY_COLUMNS)
     with cur.copy(f"COPY stage ({cols}) FROM STDIN") as copy:
         for row in rows:
