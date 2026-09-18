@@ -5,14 +5,19 @@ stub fetcher (specs/slice-3.md, Approach: "the fetcher is injected").
 from __future__ import annotations
 
 from ingest.backfill import backfill_one, plan_jobs, run_backfill, upsert_site
-from ingest.openmeteo import Metadata
+from ingest.openmeteo import Metadata, SiteSpec
 from ingest.sites import SITES
 
-# Karoo already has real, committed 2024 data (slice 1) in the dev DB this
-# fixture connects to -- tx isolates what a test WRITES, not what already
-# exists. Write-tests use a site with no prior data instead of asserting
-# global counts, so they hold under a fresh DB and this one alike.
-WRITE_SITE = SITES[1]  # Upington
+# Every real site can (and now does) hold real, committed data in the dev DB
+# this fixture connects to -- tx isolates what a test WRITES, not what
+# already exists. A name outside SITES entirely can never collide with a
+# real backfill, present or future, unlike picking "some site with no prior
+# data" -- which slice 3's own real run proved isn't stable (it silently
+# broke here once Upington got backfilled for real).
+WRITE_SITE = SiteSpec(
+    name="__test_only__", latitude=-28.45, longitude=21.26,
+    tilt_deg=28.0, azimuth_deg=180.0,
+)
 
 FAKE_META = (
     "latitude,longitude,elevation,utc_offset_seconds,timezone\n"
@@ -84,28 +89,34 @@ def test_plan_jobs_full_grid_minus_already_done(tx):
 
 
 def test_plan_jobs_skips_done(tx):
-    site_id = seed_site(tx, SITES[0])
+    # A synthetic site, not one of the real 6 -- real sites are now fully
+    # backfilled, so testing "is this one site excluded" against SITES would
+    # depend on none of the other 5 being done too, which slice 3's own real
+    # run falsified. Self-contained: one site, one done year, one pending.
+    site = WRITE_SITE
+    site_id = seed_site(tx, site)
     tx.execute(
         "INSERT INTO ingest_job (site_id, year, status) VALUES (%s, 2020, 'done')",
         (site_id,),
     )
-    jobs = plan_jobs(tx, SITES, [2020])
-    names = {s.name for s, _ in jobs}
-    assert SITES[0].name not in names
-    assert len(jobs) == 5
+    jobs = plan_jobs(tx, [site], [2020, 2021])
+    pairs = {(s.name, y) for s, y in jobs}
+    assert (site.name, 2020) not in pairs
+    assert (site.name, 2021) in pairs
 
 
 def test_plan_jobs_retries_running_and_error(tx):
-    site_id = seed_site(tx, SITES[0])
+    site = WRITE_SITE
+    site_id = seed_site(tx, site)
     tx.execute(
         "INSERT INTO ingest_job (site_id, year, status) VALUES "
         "(%s, 2020, 'running'), (%s, 2021, 'error')",
         (site_id, site_id),
     )
-    jobs = plan_jobs(tx, SITES, [2020, 2021])
+    jobs = plan_jobs(tx, [site], [2020, 2021])
     pairs = {(s.name, y) for s, y in jobs}
-    assert (SITES[0].name, 2020) in pairs
-    assert (SITES[0].name, 2021) in pairs
+    assert (site.name, 2020) in pairs
+    assert (site.name, 2021) in pairs
 
 
 def test_backfill_inserts_rows(tx):

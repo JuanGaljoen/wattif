@@ -97,7 +97,7 @@ Sequential fetches, no artificial throttle: 60 fetches is ~12/min against a
 - [x] **CP2 — Robustness.** 429 handling and the `rows` fix.
       files: `ingest/openmeteo.py`, `ingest/backfill.py`,
       `tests/test_openmeteo.py`, `tests/test_backfill.py`
-- [ ] **CP3 — Run it for real.** The deliverable is a seeded database, not
+- [x] **CP3 — Run it for real.** The deliverable is a seeded database, not
       code: ~60 fetches, ~5 min, hand it to the `runner` agent. Then verify
       criteria 1-3 against the real numbers and record them.
       files: `ingest/load.py` (CLI becomes a thin wrapper over backfill),
