@@ -19,11 +19,12 @@ import psycopg
 # Re-exported for backward compatibility: upsert_site, load and COPY_COLUMNS
 # used to live here (slice 1); they moved to backfill.py to break a circular
 # import once the CLI itself needed to depend on backfill (slice 3, CP3).
-from .backfill import (  # noqa: F401 -- re-exported, see module docstring
+from .backfill import (  # noqa: F401 -- some re-exported, see module docstring
     COPY_COLUMNS,
     backfill_one,
     load,
     plan_jobs,
+    run_backfill,
     upsert_site,
 )
 from .sites import SITES, YEARS
@@ -49,15 +50,17 @@ def main() -> None:
     years = [args.year] if args.year else YEARS
 
     with psycopg.connect(DSN) as conn, conn.cursor() as cur:
-        jobs = plan_jobs(cur, sites, years)
-        print(f"{len(jobs)} site-year(s) pending", flush=True)
-        for site, year in jobs:
-            print(f"  {site.name} {year} ...", end=" ", flush=True)
-            inserted = backfill_one(cur, site, year)
-            conn.commit()
-            print(f"inserted {inserted} rows")
-        if not jobs:
+        pending = len(plan_jobs(cur, sites, years))
+        print(f"{pending} site-year(s) pending", flush=True)
+        if pending == 0:
             print("nothing pending")
+            return
+
+        def on_done(site, year, inserted):
+            print(f"  {site.name} {year} ... inserted {inserted} rows")
+            conn.commit()
+
+        run_backfill(cur, sites, years, on_done=on_done)
 
 
 if __name__ == "__main__":

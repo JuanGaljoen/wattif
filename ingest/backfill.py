@@ -84,8 +84,8 @@ def plan_jobs(
 def backfill_one(cur, site: SiteSpec, year: int, fetch: Fetcher = fetch_csv) -> int:
     """Fetch and ingest one site-year. Returns rows inserted this run.
 
-    Never commits. Reuses load.upsert_site / load.load verbatim -- the
-    COPY-to-stage + ON CONFLICT DO NOTHING idempotency proven in slice 1.
+    Never commits. Uses upsert_site / load above -- the COPY-to-stage +
+    ON CONFLICT DO NOTHING idempotency proven in slice 1.
     """
     body = fetch(site, year)
     meta, data = parse(body)
@@ -113,22 +113,26 @@ def backfill_one(cur, site: SiteSpec, year: int, fetch: Fetcher = fetch_csv) -> 
     return inserted
 
 
+OnDone = Callable[[SiteSpec, int, int], None]
+
+
 def run_backfill(
     cur,
     sites: list[SiteSpec],
     years: list[int],
     fetch: Fetcher = fetch_csv,
-    commit: Optional[Callable[[], None]] = None,
+    on_done: Optional[OnDone] = None,
 ) -> int:
     """Backfill every pending (site, year) and return how many jobs ran.
 
-    If `commit` is given, it's called after each site-year lands -- so a
-    crash costs at most one year (db/schema.sql). Tests omit it and rely on
+    If `on_done(site, year, inserted)` is given, it's called after each
+    site-year lands -- the CLI uses it to commit (so a crash costs at most
+    one year, db/schema.sql) and report progress. Tests omit it and rely on
     the caller's rollback for isolation instead.
     """
     jobs = plan_jobs(cur, sites, years)
     for site, year in jobs:
-        backfill_one(cur, site, year, fetch=fetch)
-        if commit is not None:
-            commit()
+        inserted = backfill_one(cur, site, year, fetch=fetch)
+        if on_done is not None:
+            on_done(site, year, inserted)
     return len(jobs)
