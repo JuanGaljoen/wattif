@@ -89,7 +89,7 @@ Two assumptions to state in the README, not to fix here:
       files: `models/__init__.py` (`apply_models`), `models/constants.py`,
       `models/ddl.py`, `tests/conftest.py` (session fixture applies DDL),
       `tests/test_pv.py`, `requirements.txt` (+pytest)
-- [ ] **CP2 — Wind.** Adds only curve loading and interpolation.
+- [x] **CP2 — Wind.** Adds only curve loading and interpolation.
       files: `data/IEA_Reference_3.4MW_130.csv` (vendored + BSD-3 notice),
       `data/LICENSE-NREL`, `models/curve.py`, `models/ddl.py`, `tests/test_wind.py`
 - [ ] **CP3 — Fold in slice 1's leftovers.** `CLAUDE.md` (untracked since slice 1),
