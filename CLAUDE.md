@@ -64,11 +64,20 @@ seasonality in the monthly `time_bucket` rollup is the real check: southern
 sites must peak Dec–Feb and bottom out Jun–Jul. An inverted curve means the
 azimuth trap bit.
 
-## Known gaps (found verifying slice 1, 2026-09-18)
+## Generation models (slice 2)
 
-- [ ] **No automated tests at all.** Slice 2 owes the azimuth and km/h
-      assertions PLAN.md § Build order already calls for, plus leap-year row
-      count (8784) and idempotency.
+PV and wind are each **one SQL function, generated from Python-owned
+constants and applied idempotently at runtime** — never edited by hand, never
+duplicated. See [`docs/adr/0002`](docs/adr/0002-generation-models-as-generated-sql-functions.md)
+for why, and `models/` for the pattern to extend when a third model is added.
+
+`docs/adr/` now holds this project's dated decisions and lessons — check it
+during Recall alongside PLAN.md.
+
+## Known gaps
+
+- [ ] **PLAN.md's "cagg groups on `local_date`" design is invalid** — verified
+      live, blocks slice 4. See [`docs/adr/0001`](docs/adr/0001-cagg-cannot-group-on-local-date.md).
 - [ ] **`ingest_job.rows` records rows inserted *this run*, not rows held for
       the site-year** — so a safe re-run overwrites 8784 with 0. Misleading the
       moment it's used to audit a backfill. Fix with a `count(*)` in slice 3.
