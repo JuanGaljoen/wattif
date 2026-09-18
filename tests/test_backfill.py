@@ -147,6 +147,22 @@ def test_backfill_resumes_after_interruption(tx):
     assert weather_row_count(tx, site) == 3
 
 
+def test_backfill_rows_is_held_not_inserted(tx):
+    # CLAUDE.md's carried-forward bug: a safe re-run (0 rows inserted) must
+    # not overwrite ingest_job.rows with 0 -- it should still read the rows
+    # actually held for that site-year.
+    stub = make_stub(3)
+    site = WRITE_SITE
+    site_id = seed_site(tx, site)
+    backfill_one(tx, site, 2020, fetch=stub)
+    second = backfill_one(tx, site, 2020, fetch=stub)
+    assert second == 0  # inserted this run -- unchanged behaviour
+    tx.execute(
+        "SELECT rows FROM ingest_job WHERE site_id=%s AND year=2020", (site_id,)
+    )
+    assert tx.fetchone()[0] == 3  # held -- the fix
+
+
 def test_run_backfill_processes_only_pending(tx):
     stub = make_stub(3)
     site = WRITE_SITE

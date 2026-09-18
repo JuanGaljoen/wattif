@@ -77,8 +77,15 @@ def fetch_csv(
         "format": "csv",
     }
     last = ""
-    for attempt in range(attempts):
+    attempt = 0
+    while attempt < attempts:
         r = httpx.get(ARCHIVE_URL, params=params, timeout=timeout)
+        if r.status_code == 429:
+            # A pause, not a failed attempt -- doesn't consume the attempts
+            # budget. At 6-site x 10-year backfill scale this is expected,
+            # not exceptional (specs/slice-3.md, Approach).
+            time.sleep(int(r.headers.get("Retry-After", 60)))
+            continue
         r.raise_for_status()
         # The archive returns HTTP 200 with a plain-text error body on a
         # server-side timeout ("Unexpected error while streaming data:
@@ -87,8 +94,9 @@ def fetch_csv(
         if r.text.lstrip().startswith("latitude,"):
             return r.text
         last = r.text.strip()[:200]
-        if attempt < attempts - 1:
-            time.sleep(2 * (attempt + 1))
+        attempt += 1
+        if attempt < attempts:
+            time.sleep(2 * attempt)
     raise RuntimeError(f"archive returned a non-CSV body {attempts}x: {last!r}")
 
 

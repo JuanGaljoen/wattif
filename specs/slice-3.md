@@ -94,7 +94,7 @@ Sequential fetches, no artificial throttle: 60 fetches is ~12/min against a
       files: `ingest/sites.py` (the six), `ingest/backfill.py`
       (`plan_jobs`, `backfill_one`, `run_backfill`), `tests/conftest.py`
       (+`tx` rollback fixture, +canned-CSV stub), `tests/test_backfill.py`
-- [ ] **CP2 — Robustness.** 429 handling and the `rows` fix.
+- [x] **CP2 — Robustness.** 429 handling and the `rows` fix.
       files: `ingest/openmeteo.py`, `ingest/backfill.py`,
       `tests/test_openmeteo.py`, `tests/test_backfill.py`
 - [ ] **CP3 — Run it for real.** The deliverable is a seeded database, not

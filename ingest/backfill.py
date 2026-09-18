@@ -7,6 +7,7 @@ tests provable without the network and without touching the dev database
 """
 from __future__ import annotations
 
+from datetime import date
 from typing import Callable, Optional
 
 from .load import load, upsert_site
@@ -54,10 +55,19 @@ def backfill_one(cur, site: SiteSpec, year: int, fetch: Fetcher = fetch_csv) -> 
         (site_id, year),
     )
     inserted = load(cur, rows_for_copy(site_id, meta, data))
+    # ingest_job.rows records rows HELD for this site-year, not rows inserted
+    # this run -- a safe re-run (0 inserted) must not overwrite a real count
+    # with 0 (CLAUDE.md, "Known gaps"; specs/slice-3.md CP2).
+    cur.execute(
+        "SELECT count(*) FROM weather_hour "
+        "WHERE site_id = %s AND local_date >= %s AND local_date < %s",
+        (site_id, date(year, 1, 1), date(year + 1, 1, 1)),
+    )
+    (held,) = cur.fetchone()
     cur.execute(
         "UPDATE ingest_job SET status='done', rows=%s, fetched_at=now() "
         "WHERE site_id=%s AND year=%s",
-        (inserted, site_id, year),
+        (held, site_id, year),
     )
     return inserted
 
