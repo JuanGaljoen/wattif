@@ -64,6 +64,83 @@ seasonality in the monthly `time_bucket` rollup is the real check: southern
 sites must peak Dec–Feb and bottom out Jun–Jul. An inverted curve means the
 azimuth trap bit.
 
+## Looking at the database
+
+**TablePlus is the default way in** — browsing 526k rows is what a GUI is
+for. Any Postgres client works; the port is published in
+`docker-compose.yml`, so nothing needs configuring on the container:
+
+```
+Host 127.0.0.1 · Port 5432 · User postgres · Password postgres · DB resource
+```
+
+Its schema dropdown also lists `_timescaledb_internal`, where the 122
+`_hyper_1_*_chunk` tables and their compressed twins live. That is the
+partitioning made literal — worth looking at once.
+
+For a shell instead, **from the repo root** (`docker compose` resolves the
+compose file from the working directory) — or `docker exec -it wattif-db-1
+psql -U postgres -d resource` from anywhere:
+
+```sh
+docker compose up -d
+docker compose exec db psql -U postgres -d resource
+```
+
+**An agent cannot run that one**: Claude Code's Bash has no TTY, so
+interactive psql hangs. Agents use the one-shot form —
+`docker compose exec -T db psql -U postgres -d resource -c "<sql>"`.
+
+Useful `psql` meta-commands: `\dt` (tables), `\d+ weather_hour` (columns),
+`\dv` (views — `daily_cf` shows here), `\x` (expanded rows), `\timing`,
+`\q`. In psql, `\e` opens the last query in `$EDITOR`.
+
+**Three tables and one aggregate**: `site` (6 rows — ids are 1, 75, 85, 95,
+105, 115, *not* 1–6), `weather_hour` (526,032 rows), `ingest_job` (one row
+per site-year), and the `daily_cf` cagg (21,918 rows).
+
+**Reading raw rows, without the two traps biting:** `ts` is UTC, so a local
+day starts at `22:00` on the *previous* calendar date — that is why
+`local_date` is its own column, and why `daily_cf.day` reads as `…22:00`.
+Filter on `local_date`, not on `date(ts)`.
+
+### Seeing Timescale actually do its job
+
+These are the introspection views worth knowing; they are where the
+hypertable stops being "a table" and starts being visible machinery.
+
+```sql
+-- the hypertable and its partitions
+SELECT hypertable_name, num_chunks, compression_enabled
+  FROM timescaledb_information.hypertables;
+SELECT chunk_name, range_start, range_end, is_compressed
+  FROM timescaledb_information.chunks
+ WHERE hypertable_name = 'weather_hour' ORDER BY range_start;
+
+-- what compression bought (README quotes the measured figure)
+SELECT * FROM hypertable_compression_stats('weather_hour');
+SELECT pg_size_pretty(hypertable_size('weather_hour'));
+
+-- the cagg, and the background jobs that maintain both
+SELECT view_name, materialized_only, finalized
+  FROM timescaledb_information.continuous_aggregates;
+SELECT job_id, application_name, schedule_interval, config
+  FROM timescaledb_information.jobs WHERE job_id >= 1000;
+```
+
+**The single best demonstration is `EXPLAIN`.** A time-bounded query names
+only the chunks it touches — 2 of 122 for one month — and on compressed
+chunks the plan reads `Custom Scan (DecompressChunk)` with a `Vectorized
+Filter`:
+
+```sql
+EXPLAIN (COSTS OFF) SELECT * FROM weather_hour
+ WHERE ts >= '2024-06-01' AND ts < '2024-07-01' AND site_id = 1;
+```
+
+Drop the `ts` bounds and all 122 chunks appear in the plan. That difference
+*is* chunk exclusion, and it is the reason the time column is in the PK.
+
 ## Testing convention
 
 **A write-test's fixtures are synthetic (`"__test_only__"`), never "a real
