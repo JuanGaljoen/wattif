@@ -202,6 +202,16 @@ them is not recomputing the answer the way the code computes it.
 4. **Four series plus a shaded band may be visually busy.** The raw layer has
    to stay clearly subordinate to the mean, or 5b undoes CP3's readability.
 
+## Checkpoints
+
+- [x] **CP1** — `hourly_cf` + cagg.py generalised · files: `timescale/cagg.py`,
+      `timescale/__init__.py`, `tests/test_timescale.py`,
+      `tests/test_compression.py`
+- [ ] **CP2** — the reliability endpoint · files: `api/reliability.py`,
+      `api/main.py`, `tests/test_api.py`
+- [ ] **CP3** — the view · files: `web/app.js`, `web/index.html`,
+      `web/style.css`, `README.md`
+
 ## For Chronicle
 
 - **The measurement that chose the design** — that the cost was the model

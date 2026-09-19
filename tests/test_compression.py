@@ -47,10 +47,20 @@ def test_compression_policy_exists(db):
 
 
 def test_refresh_policy_exists(db):
+    """Scoped to daily_cf by name.
+
+    It counted every refresh policy until slice 5b added hourly_cf, at which
+    point it failed on a correct change -- the count was standing in for
+    "daily_cf has one". tests/test_timescale.py owns the "every cagg has a
+    policy" assertion.
+    """
     with db.cursor() as cur:
         cur.execute(
-            "SELECT count(*) FROM timescaledb_information.jobs "
-            "WHERE proc_name = 'policy_refresh_continuous_aggregate'"
+            "SELECT count(*) FROM timescaledb_information.jobs j "
+            "JOIN timescaledb_information.continuous_aggregates c "
+            "  ON c.materialization_hypertable_name = j.hypertable_name "
+            "WHERE j.proc_name = 'policy_refresh_continuous_aggregate' "
+            "  AND c.view_name = 'daily_cf'"
         )
         assert cur.fetchone()[0] == 1
 
