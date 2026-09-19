@@ -188,6 +188,53 @@ view comment and `apply_timescale` refuses to run against a mismatch. Bump
 explicit full-range `refresh_daily_cf(conn)` — the refresh policy only covers
 a moving recent window.
 
+## The web layer (slice 5a)
+
+Two containers, `db` and `api` — **no Caddy**. FastAPI serves the JSON and
+the frontend on one origin
+([`docs/adr/0006`](docs/adr/0006-no-reverse-proxy-until-there-is-a-domain.md),
+which supersedes PLAN.md § Hosting).
+
+- **The frontend uses same-origin relative paths** — `fetch('/api/sites')`,
+  never an absolute URL — and config comes from the environment
+  (`config.py`). Those two rules are the whole reason a proxy can be added
+  later with no code change and no CORS. An absolute URL anywhere breaks it.
+- **Route order is load-bearing**: the API router is registered *before* the
+  `StaticFiles` mount at `/`, because Starlette matches in registration
+  order and a root mount swallows everything after it. Pinned by a test.
+- **Startup applies the runtime DDL** (`apply_models`, `apply_timescale`) —
+  they had no caller outside the test suite until now
+  ([`docs/adr/0008`](docs/adr/0008-runtime-ddl-needs-a-production-caller.md)).
+  The DDL takes `ddl_cursor()` (tuple rows); the read endpoints take
+  `cursor()` (dict rows). Swapping them raises `KeyError: 0`.
+- **Reading `daily_cf.day` always needs `(day AT TIME ZONE …)::date`** with
+  `SITE_TIMEZONE` *imported* from `timescale` — the bucket is a
+  local-midnight instant, so a raw read is off by one day, silently
+  ([`docs/adr/0007`](docs/adr/0007-a-cagg-bucket-is-a-local-midnight-instant.md)).
+- **The API returns capacity factor, never megawatts.** `MWh/day = cf x
+  rated MW x 24` happens in the browser, so changing the farm size refetches
+  nothing.
+
+**The frontend has no build step.** Plain ES modules; Leaflet, uPlot and
+Barlow are vendored under `web/vendor/` with their licences. No npm, no
+bundler, nothing to install.
+
+- **Amber `#c87d22` is solar and cyan `#35a3bd` is wind**, on markers and
+  chart lines alike. Both are validated for this dark surface (lightness
+  band, chroma floor, CVD separation, contrast) — not chosen by eye.
+- **The chart plots a centred 30-day mean.** Raw daily wind swings 0 to ~1.0
+  and buries solar's seasonal wave; centred rather than trailing, or
+  December's peak slides into January. Smoothing is linear, so it runs once
+  per load and capacity scales after it.
+- **The basemap branches on `CARTO_KEY`**: Dark Matter with one, OSM
+  inverted in CSS without. The CSS filter belongs to the fallback only.
+
+**Sites are named after the nearest town**, not a region or province —
+Theunissen, Polokwane, Gqeberha (renamed from Port Elizabeth in 2021).
+`site.name` is the `ON CONFLICT` key, so a rename is an `UPDATE` against the
+database as well as an edit to `ingest/sites.py`; miss it and the next
+backfill inserts new empty sites and orphans the weather rows.
+
 ## Known gaps
 
 - [x] ~~PLAN.md's "cagg groups on `local_date`" design is invalid~~ — resolved
@@ -196,3 +243,14 @@ a moving recent window.
       [`docs/adr/0001`](docs/adr/0001-cagg-cannot-group-on-local-date.md).
 - [x] ~~`ingest_job.rows` records rows inserted *this run*, not rows held~~ —
       fixed in slice 3 (`ingest/backfill.py`, `backfill_one`).
+- [ ] **A clean clone has no data.** Slice 5a made the *structures*
+      self-installing, so a fresh database answers `[]` and `404` rather
+      than 500 — but `docker compose up` still shows an empty map until
+      someone runs the backfill (~1,570 API calls). PLAN.md's slice-6 seed
+      dump is what closes this, and it is the last thing standing between
+      "clone it" and "clone it and see the product".
+- [ ] **Smoothing hides the lulls.** The chart's 30-day mean is what makes
+      the seasonality legible, and it is also exactly what erases the worst
+      rolling 24 hours — 0.000 at four sites, and slice 5b's headline
+      number. 5b needs to decide: a faint raw-daily layer behind the mean, a
+      window that shrinks with zoom, or a separate view.

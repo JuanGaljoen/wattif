@@ -10,10 +10,13 @@ Public interface:
 """
 from __future__ import annotations
 
-from .cagg import CAGG_NAME, ensure_cagg
+from .cagg import CAGG_NAME, SITE_TIMEZONE, ensure_cagg
 from .compression import compress_all, ensure_compression, ensure_refresh_policy
 
-__all__ = ["apply_timescale", "refresh_daily_cf", "compress_all"]
+# SITE_TIMEZONE is public because the API reads daily_cf too and must use
+# the SAME constant, never a retyped literal: a second copy is how the
+# single-timezone constraint (docs/adr/0001) quietly gets broken.
+__all__ = ["apply_timescale", "refresh_daily_cf", "compress_all", "SITE_TIMEZONE"]
 
 
 def apply_timescale(cur) -> None:

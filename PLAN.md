@@ -153,11 +153,16 @@ no Timescale Toolkit — plain `timescale/timescaledb:2.x-pg17` is enough.
 3. **DONE — Backfill.** CSV → `COPY`, resumable per `(site, year)`, re-runnable safely
    (**idempotency is what will actually break — test it**). Seed 6 sites.
 4. **DONE — Daily cagg + compression.** Over the capacity-factor expression.
-5. **NEXT — FastAPI + frontend.** Map, generation chart, reliability view. Opens on a
-   seeded site, never an empty shell.
-6. **Package it.** Caddy in the compose file, seed dump published to a GitHub
-   Release, README with the GIF, the measured numbers, and verified-vs-assumed
-   split out.
+5. **Split in two at slice 5a's Understand.**
+   - **5a — DONE. Map + generation chart, end to end.** FastAPI, two
+     endpoints, a no-build-step frontend. See `specs/slice-5a.md`.
+   - **5b — NEXT. The reliability view.** Where the ~2m21s hourly-query
+     problem gets decided, and where the smoothing that makes 5a's chart
+     readable has to give the lulls back.
+6. **Package it.** Seed dump published to a GitHub Release (the thing standing
+   between "clone it" and "clone it and see the product"), README with the GIF,
+   the measured numbers, and verified-vs-assumed split out. No Caddy — see
+   Hosting.
 
 ---
 
@@ -176,16 +181,21 @@ zero, can run several instances.
 free allowance is gone. Railway and Render exclude persistent disks from free.
 A dead link on a portfolio in eight months is worse than never claiming one.
 
-Three containers, one file — the same locally and in any future deployment:
+**Two containers, not three — Caddy is dropped.** Its one load-bearing job was
+automatic TLS, which needs a public domain that "nothing hosted" rules out; on
+localhost it would only proxy to a single service. FastAPI serves the frontend
+itself. Superseded by
+[`docs/adr/0006`](docs/adr/0006-no-reverse-proxy-until-there-is-a-domain.md),
+which also records what keeps adding a proxy later free: same-origin relative
+paths and env-driven config.
 
 ```
 timescaledb   timescale/timescaledb:2.x-pg17   + named volume
-api           FastAPI
-caddy         TLS (automatic) + serves the built frontend as static files
+api           FastAPI — the JSON and the frontend, one origin
 ```
 
-Caddy serving the frontend's `dist/` means **no Node in production** — one less
-service and one less thing to patch.
+There is still **no Node in production** — the frontend has no build step at
+all, so there is no `dist/` to serve.
 
 **What replaces the live URL, and must be as good:**
 - **A seed dump in a GitHub Release.** `pg_dump` of the corpus, gzipped — ~30 MB
@@ -234,6 +244,8 @@ your region. Additive, never load-bearing.
 
 ## Superseded
 
+- **PLAN's three-container topology, with Caddy.** Superseded by
+  `docs/adr/0006` — no domain, no TLS, no job.
 - **PLAN's schema section says "the daily cagg groups on `local_date`".** It
   cannot: a continuous aggregate must bucket on the hypertable's time column.
   Superseded by `docs/adr/0001`; resolved in slice 4 by a constant timezone
