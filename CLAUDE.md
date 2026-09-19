@@ -235,6 +235,39 @@ Theunissen, Polokwane, Gqeberha (renamed from Port Elizabeth in 2021).
 database as well as an edit to `ingest/sites.py`; miss it and the next
 backfill inserts new empty sites and orphans the weather rows.
 
+## The reliability layer (slice 5b)
+
+`hourly_cf(site_id, hour, pv_cf, wind_cf, gti)` is a second cagg over the
+generation expression — 526,032 rows, ~62 MB. It exists because the physics,
+not the windowing, was the cost: evaluating the model functions over every
+hour takes ~41.6 s, while the window queries over precomputed values take
+~126 ms
+([`docs/adr/0009`](docs/adr/0009-measure-before-designing-for-performance.md)).
+
+- **Both caggs are declared once** in `timescale/cagg.py` as `Cagg(name,
+  version, ddl)`, and `apply_timescale` loops. A third is a one-line
+  declaration — never a second copy of the version-marker logic.
+- **`hourly_cf` takes no timezone argument**: an hour boundary isn't local
+  and SAST has no DST. The timezone belongs at read time, per ADR 0007.
+- **`gti` is stored, not inferred**, so the daylight filter (`gti > 0`) is
+  literally the one `db/reliability.sql` uses. `pv_cf > 0` would be an exact
+  proxy, but "matches the oracle" should be checkable, not argued.
+- **`db/reliability.sql` is the oracle and stays the oracle.** It computes
+  from raw `weather_hour` with the models inline — a different path from the
+  aggregates the API reads, which is what makes agreement meaningful.
+- **Which aggregate answers which metric** mirrors that script exactly:
+  worst-24h and hours-below-10% from `hourly_cf`; worst-7d and P50/P90 from
+  `daily_cf`.
+
+**Every metric endpoint carries a structural assertion, not just a range
+check.** `years == 10` is the one that catches a wrong year grouping —
+ranges don't, because a ~9% error stays inside the README's published
+ranges. Pick an assertion the bug *cannot* avoid violating
+([`docs/adr/0010`](docs/adr/0010-assert-what-the-bug-must-violate.md)).
+
+**The hybrid is `(pv_cf + wind_cf) / 2`** — equal rated capacity, a stated
+product choice sitting in the README's *assumed* column, not an optimum.
+
 ## Known gaps
 
 - [x] ~~PLAN.md's "cagg groups on `local_date`" design is invalid~~ — resolved
@@ -249,8 +282,15 @@ backfill inserts new empty sites and orphans the weather rows.
       someone runs the backfill (~1,570 API calls). PLAN.md's slice-6 seed
       dump is what closes this, and it is the last thing standing between
       "clone it" and "clone it and see the product".
-- [ ] **Smoothing hides the lulls.** The chart's 30-day mean is what makes
-      the seasonality legible, and it is also exactly what erases the worst
-      rolling 24 hours — 0.000 at four sites, and slice 5b's headline
-      number. 5b needs to decide: a faint raw-daily layer behind the mean, a
-      window that shrinks with zoom, or a separate view.
+- [x] ~~Smoothing hides the lulls~~ — resolved in slice 5b: the daily
+      series is drawn at full strength with the 30-day mean beneath it, and
+      either layer toggles off.
+- [ ] **No hourly series is served.** `hourly_cf` holds hourly values and
+      the reliability endpoint reads them, but `/daily` is the only series
+      endpoint — so the chart bottoms out at daily resolution and you cannot
+      zoom into the actual 24 hours of a 0.000 wind lull. A real addition,
+      not a tweak.
+- [ ] **`web/app.js` is ~420 lines covering map, chart and panel**, with no
+      test coverage. Splitting it is right; doing it blind at the end of a
+      slice was not, so it was left deliberately rather than done
+      unverified.

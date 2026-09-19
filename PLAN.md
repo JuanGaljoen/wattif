@@ -156,9 +156,8 @@ no Timescale Toolkit — plain `timescale/timescaledb:2.x-pg17` is enough.
 5. **Split in two at slice 5a's Understand.**
    - **5a — DONE. Map + generation chart, end to end.** FastAPI, two
      endpoints, a no-build-step frontend. See `specs/slice-5a.md`.
-   - **5b — NEXT. The reliability view.** Where the ~2m21s hourly-query
-     problem gets decided, and where the smoothing that makes 5a's chart
-     readable has to give the lulls back.
+   - **5b — DONE. The reliability view.** `hourly_cf`, the metrics endpoint
+     and the panel. See `specs/slice-5b.md`.
 6. **Package it.** Seed dump published to a GitHub Release (the thing standing
    between "clone it" and "clone it and see the product"), README with the GIF,
    the measured numbers, and verified-vs-assumed split out. No Caddy — see
@@ -219,13 +218,17 @@ your region. Additive, never load-bearing.
 
 ## Still open
 
-- [ ] **Reliability view design** — the metrics are decided and measured
-      (below); how they're *presented* is a slice-5 question.
-- [ ] **Hourly metrics are too slow to serve live.** The two hourly
-      reliability queries take ~2m21s over 526k rows. Fine from a script,
-      not behind an HTTP request. `docs/adr/0005` names the fix's shape:
-      materialise hourly capacity factor the way `daily_cf` materialises
-      daily. Decide at slice 5's Understand.
+- [x] ~~**Reliability view design**~~ — resolved in slice 5b: metrics panel
+      per site, with the worst window shaded on the chart and clickable to
+      zoom to it. A 50/50 hybrid lull was added to the decided set once 5a
+      made the seasonal complementarity visible.
+- [x] ~~**Hourly metrics are too slow to serve live.**~~ — resolved in
+      slice 5b, and the framing above was wrong. The 2m21s was ~41.6s of
+      evaluating the model functions and under a second of windowing, so
+      precomputing the physics into `hourly_cf` was the whole fix: per-site
+      metrics now take ~126 ms and no summary table was needed. Measured
+      before designing, see
+      [`docs/adr/0009`](docs/adr/0009-measure-before-designing-for-performance.md).
 
 ## Settled since this plan was written
 
