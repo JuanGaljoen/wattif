@@ -6,12 +6,12 @@ Pick a point on a map. See what a solar or wind farm there would have generated,
 hour by hour, over ten years of real weather — and how reliable it would
 actually have been.
 
-**Status: slice 5a of 6.** Six South African sites, ten years each:
+**Status: slice 5b of 6.** Six South African sites, ten years each:
 **526,032 hourly rows**, rolled up into a daily continuous aggregate
 (**21,918 rows**) over the generation expression, with the hypertable
 compressed **74 MB → 23 MB (3.2×)** — and now a map and a generation chart
 over the top of it. See [PLAN.md](PLAN.md) for the build order and
-[specs/slice-5a.md](specs/slice-5a.md) for this slice's plan.
+[specs/slice-5b.md](specs/slice-5b.md) for this slice's plan.
 
 ```sh
 docker compose up -d          # db + api
@@ -77,6 +77,30 @@ The story those numbers tell: **wind has far deeper sustained lulls than
 solar.** Solar is reliably cyclical — it comes back every morning. Wind can
 be becalmed for a week.
 
+### What a 50/50 farm would do
+
+Wind peaks in July and solar in December at these sites, so the two are
+seasonally complementary. Splitting the rated capacity evenly between them
+turns out to change the picture — worst rolling 7 days, 2016–2025:
+
+| Site | Solar | Wind | 50/50 | vs wind alone |
+|---|---|---|---|---|
+| Karoo | 0.095 | 0.014 | **0.101** | 7.1× |
+| Upington | 0.123 | 0.041 | **0.136** | 3.4× |
+| Cape West Coast | 0.087 | 0.080 | **0.135** | 1.7× |
+| Gqeberha | 0.094 | 0.045 | **0.126** | 2.8× |
+| Theunissen | 0.136 | 0.007 | 0.106 | 14.3× |
+| Polokwane | 0.119 | 0.011 | 0.102 | 9.0× |
+
+**A 50/50 split beats wind alone at every site, but beats *both* at only
+four.** At Theunissen and Polokwane the wind resource is weak enough
+(0.007 and 0.011) that mixing it in mostly dilutes a strong solar site.
+Complementarity pays where the two resources are comparable; where one
+dominates, it costs.
+
+The 50/50 ratio is a **stated choice, not an optimum** — see the assumed
+column below.
+
 The PV "hours below 10%" figure counts **daylight hours only**. Counting all
 hours would include every night hour and measure darkness rather than
 reliability.
@@ -117,6 +141,8 @@ confidence ratings: [docs/research/2026-09-18-model-coefficients.md](docs/resear
 | Turbine rated power, curve | 3,370 kW, 50-point curve | **verified** | IEA 3.4 MW/130 RWT, NREL/TP-5000-73492 (BSD-3-Clause) |
 | `NOCT` | 45.0 °C | **assumed** | typical crystalline-silicon value; real modules run 42–48 °C, per-datasheet |
 | `GAMMA` (temp. coefficient) | −0.004 /°C | **assumed** | common datasheet convention (−0.3 to −0.5%/°C range); no single primary table |
+| Hybrid mix | 50/50 by rated capacity | **assumed** | a stated product choice, not an optimised or sourced ratio; `(pv_cf + wind_cf) / 2` |
+| Low-output threshold | 10% of rated | **assumed** | PLAN.md's own definition of "hours below 10% output" |
 
 Known limitations, stated rather than fixed:
 

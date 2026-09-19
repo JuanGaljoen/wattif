@@ -38,6 +38,13 @@ const markers = new Map();
 const SOLAR = '#c87d22';
 const WIND  = '#35a3bd';
 
+// The 30-day mean is the SUBDUED layer: it is a guide through the data,
+// not the data. The daily series carries the full validated hue, because
+// that is what actually happened -- and at close zoom the mean averages a
+// large share of the visible window and says correspondingly little.
+const SOLAR_MEAN = 'rgba(200, 125, 34, 0.55)';
+const WIND_MEAN  = 'rgba(53, 163, 189, 0.55)';
+
 const HOURS_PER_DAY = 24;
 
 // Daily capacity factor is mostly variance: wind swings from 0 to near 1.0
@@ -48,7 +55,8 @@ const HOURS_PER_DAY = 24;
 const SMOOTH_DAYS = 30;
 
 let chart = null;       // the uPlot instance
-let series = null;      // { days: Int32Array(unix s), pv: [], wind: [] }
+let series = null;      // { days, pvRaw, windRaw, pv, wind } -- cf, unscaled
+let lull = null;        // the window the chart shades: {start, end} unix s
 
 /** Dark Matter when a key is set; OSM inverted in CSS when it is not.
  *
@@ -93,6 +101,7 @@ function addMarker(site) {
 
 function select(siteId) {
   const site = sites.get(siteId);
+  lull = null;                       // don't shade the old site's window
   loadSeries(siteId, site.name);
 
   for (const [id, marker] of markers) {
@@ -161,6 +170,23 @@ function ratedMw() {
 // pushed past the dock's edge and clipped.
 const LEGEND_STRIP = 34;
 
+/** Paint the selected lull as a band across the plot.
+ *
+ *  A uPlot draw hook rather than a series: the band is an annotation over
+ *  the x range, not data. Drawn under the lines by running in `draw`, which
+ *  fires before the series are stroked.
+ */
+function shadeLull(u) {
+  if (!lull) return;
+  const x0 = u.valToPos(lull.start, 'x', true);
+  const x1 = u.valToPos(lull.end, 'x', true);
+  const { ctx } = u;
+  ctx.save();
+  ctx.fillStyle = 'rgba(232, 237, 242, 0.13)';
+  ctx.fillRect(x0, u.bbox.top, Math.max(2, x1 - x0), u.bbox.height);
+  ctx.restore();
+}
+
 function chartSize() {
   const box = document.getElementById('chart');
   return {
@@ -175,7 +201,13 @@ function drawChart() {
   // is linear, so scaling after it gives the same numbers as scaling before
   // -- and a capacity keystroke costs one multiply per point instead of
   // re-running a 30-wide window over 3,653 of them, twice.
-  const data = [series.days, energy(series.pv, mw), energy(series.wind, mw)];
+  const data = [
+    series.days,
+    energy(series.pv, mw),        // 30-day mean, drawn first (underneath)
+    energy(series.wind, mw),
+    energy(series.pvRaw, mw),     // daily, drawn on top
+    energy(series.windRaw, mw),
+  ];
 
   if (chart) {
     chart.setData(data);
@@ -198,18 +230,203 @@ function drawChart() {
           label: 'MWh per day', labelFont: '14px Barlow Semi Condensed',
           labelSize: 34 },
       ],
+      hooks: { draw: [shadeLull] },
+      // Order is draw order. The mean is wide and soft and goes down
+      // first; the daily line is thin and full-strength and sits on top,
+      // because it is the measurement and the mean is the guide.
       series: [
-        { value: (u, t) =>
+        { label: 'Date',
+          value: (u, t) =>
             t == null ? '--' : new Date(t * 1000).toISOString().slice(0, 10) },
-        { label: 'Solar', stroke: SOLAR, width: 1.25,
+        { label: 'Solar, 30-day', stroke: SOLAR_MEAN, width: 2.5,
+          points: { show: false },
           value: (u, v) => (v == null ? '--' : v.toFixed(0) + ' MWh') },
-        { label: 'Wind', stroke: WIND, width: 1.25,
+        { label: 'Wind, 30-day', stroke: WIND_MEAN, width: 2.5,
+          points: { show: false },
+          value: (u, v) => (v == null ? '--' : v.toFixed(0) + ' MWh') },
+        { label: 'Solar, daily', stroke: SOLAR, width: 1,
+          points: { show: false },
+          value: (u, v) => (v == null ? '--' : v.toFixed(0) + ' MWh') },
+        { label: 'Wind, daily', stroke: WIND, width: 1,
+          points: { show: false },
           value: (u, v) => (v == null ? '--' : v.toFixed(0) + ' MWh') },
       ],
     },
     data,
     document.getElementById('chart'),
   );
+}
+
+/** The metrics panel.
+ *
+ *  Worst-24h and worst-7d cells are buttons: clicking one shades that
+ *  window on the chart. The numbers are the answer; the shading is what
+ *  makes an abstract 0.0141 mean something.
+ */
+function renderReliability(body) {
+  const rows = [
+    ['Worst 24 hours', 'worst_24h', true],
+    ['Worst 7 days', 'worst_7d', true],
+  ];
+
+  const tbody = document.getElementById('reliability-body');
+  tbody.replaceChildren();
+
+  for (const [label, key, clickable] of rows) {
+    const tr = document.createElement('tr');
+    tr.append(Object.assign(document.createElement('th'),
+      { scope: 'row', textContent: label }));
+
+    for (const resource of ['pv', 'wind', 'hybrid']) {
+      const cell = body[key][resource];
+      const td = document.createElement('td');
+      if (clickable) {
+        const b = document.createElement('button');
+        b.textContent = cell.cf.toFixed(3);
+        b.title = `${cell.start.slice(0, 10)} to ${cell.end.slice(0, 10)}`;
+        b.addEventListener('click', () => markLull(key, resource, body));
+        td.append(b);
+      } else {
+        td.textContent = cell.cf.toFixed(3);
+      }
+      tr.append(td);
+    }
+    tbody.append(tr);
+  }
+
+  // Hours below 10% and the annual percentiles are per resource -- a 50/50
+  // farm has no meaningful "hours below 10% of WHAT", so those cells are
+  // blank rather than filled with a number that would invite comparison.
+  const plain = [
+    ['Hours below 10%, a year',
+     body.hours_below_10pct.pv_daylight.toLocaleString(),
+     body.hours_below_10pct.wind.toLocaleString()],
+    ['P50 annual', body.annual.pv.p50.toFixed(3), body.annual.wind.p50.toFixed(3)],
+    ['P90 annual', body.annual.pv.p90.toFixed(3), body.annual.wind.p90.toFixed(3)],
+  ];
+  for (const [label, pv, wind] of plain) {
+    const tr = document.createElement('tr');
+    tr.append(Object.assign(document.createElement('th'),
+      { scope: 'row', textContent: label }));
+    tr.append(Object.assign(document.createElement('td'), { textContent: pv }));
+    tr.append(Object.assign(document.createElement('td'), { textContent: wind }));
+    tr.append(Object.assign(document.createElement('td'),
+      { textContent: '\u2014', className: 'na' }));
+    tbody.append(tr);
+  }
+}
+
+const RESOURCE_LABEL = { pv: 'Solar', wind: 'Wind', hybrid: '50/50' };
+
+const YEAR = 365.25 * 86400;
+
+// Anchored on the CURRENT view's centre, not on the end of the data: after
+// jumping to a lull in 2017, "3 months" should mean three months around
+// that lull, not a jump back to 2025.
+const RANGES = [
+  ['All', null],
+  ['5y', 5 * YEAR],
+  ['1y', YEAR],
+  ['3m', YEAR / 4],
+  ['1w', 7 * 86400],
+];
+
+function dataBounds() {
+  return [series.days[0], series.days[series.days.length - 1]];
+}
+
+function setRange(span, label) {
+  const [lo, hi] = dataBounds();
+
+  if (span === null) {
+    chart.setScale('x', { min: lo, max: hi });
+  } else {
+    const { min, max } = chart.scales.x;
+    const centre = (min + max) / 2;
+    let a = centre - span / 2;
+    let b = centre + span / 2;
+    if (a < lo) [a, b] = [lo, Math.min(hi, lo + span)];
+    if (b > hi) [a, b] = [Math.max(lo, hi - span), hi];
+    chart.setScale('x', { min: a, max: b });
+  }
+  markRangeButton(label);
+}
+
+function markRangeButton(label) {
+  for (const b of document.querySelectorAll('#ranges button')) {
+    b.setAttribute('aria-pressed', String(b.textContent === label));
+  }
+}
+
+// uPlot's own legend already toggles a single series -- that is what the
+// hint points at. These toggle a whole LAYER, which is the thing actually
+// wanted: at close zoom a 30-day mean averages a third of the visible
+// window and says very little, so being able to drop it in one click
+// matters more than hiding solar alone.
+const LAYERS = [
+  ['Daily', [3, 4]],
+  ['30-day', [1, 2]],
+];
+
+function buildLayerToggles() {
+  const box = document.getElementById('layers');
+  box.replaceChildren();
+  for (const [label, indices] of LAYERS) {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.setAttribute('aria-pressed', 'true');
+    b.addEventListener('click', () => {
+      const on = b.getAttribute('aria-pressed') !== 'true';
+      b.setAttribute('aria-pressed', String(on));
+      for (const i of indices) chart.setSeries(i, { show: on });
+    });
+    box.append(b);
+  }
+}
+
+function buildRangeButtons() {
+  const box = document.getElementById('ranges');
+  box.replaceChildren();
+  for (const [label, span] of RANGES) {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.setAttribute('aria-pressed', String(label === 'All'));
+    b.addEventListener('click', () => setRange(span, label));
+    box.append(b);
+  }
+}
+
+function markLull(key, resource, body) {
+  const cell = body[key][resource];
+  lull = {
+    start: Date.parse(cell.start) / 1000,
+    end: Date.parse(cell.end) / 1000,
+  };
+  const span = key === 'worst_24h' ? 'worst 24 hours' : 'worst 7 days';
+  document.getElementById('reliability-hint').textContent =
+    `${RESOURCE_LABEL[resource]}: ${span} from ${cell.start.slice(0, 10)}`;
+
+  // Zoom to it, with the window itself about a third of the view -- enough
+  // surrounding weather to see that it IS a lull rather than the norm.
+  if (chart) {
+    const pad = Math.max((lull.end - lull.start), 7 * 86400);
+    const [lo, hi] = dataBounds();
+    chart.setScale('x', {
+      min: Math.max(lo, lull.start - pad),
+      max: Math.min(hi, lull.end + pad),
+    });
+    markRangeButton(null);
+  }
+
+  for (const b of document.querySelectorAll('.reliability button')) {
+    b.setAttribute('aria-pressed', 'false');
+  }
+  const idx = ['pv', 'wind', 'hybrid'].indexOf(resource);
+  const row = key === 'worst_24h' ? 0 : 1;
+  document.querySelectorAll('.reliability tbody tr')[row]
+    .querySelectorAll('button')[idx].setAttribute('aria-pressed', 'true');
+
+  if (chart) chart.redraw();
 }
 
 async function loadSeries(siteId, siteName) {
@@ -220,13 +437,24 @@ async function loadSeries(siteId, siteName) {
   // already the site's own local day (docs/adr/0001).
   series = {
     days: body.days.map((d) => Date.parse(d + 'T00:00:00Z') / 1000),
+    pvRaw: body.pv_cf,
+    windRaw: body.wind_cf,
     pv: smooth(body.pv_cf, SMOOTH_DAYS),
     wind: smooth(body.wind_cf, SMOOTH_DAYS),
   };
 
   document.getElementById('chart-title').textContent =
-    `${siteName} — 30-day average generation, 2016-2025`;
+    `${siteName} — daily generation, 2016-2025`;
   drawChart();
+
+  buildRangeButtons();
+  buildLayerToggles();
+
+  const rel = await fetch(`/api/sites/${siteId}/reliability`).then((r) => r.json());
+  renderReliability(rel);
+  // Open on wind's worst week: the deepest lull at every site, and the one
+  // that makes the case for the hybrid figure beside it.
+  markLull('worst_7d', 'wind', rel);
 }
 
 const sites = new Map();

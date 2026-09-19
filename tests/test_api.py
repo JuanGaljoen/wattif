@@ -261,3 +261,22 @@ def test_hours_below_10pct_are_per_year_not_per_decade(client, site_ids):
 
 def test_reliability_unknown_site_is_404(client):
     assert client.get("/api/sites/999999/reliability").status_code == 404
+
+
+def test_annual_metrics_group_by_the_LOCAL_year(client, site_ids):
+    """docs/adr/0007, in its fourth guise.
+
+    daily_cf.day and hourly_cf.hour are timestamptz at local boundaries.
+    Extract the year without `AT TIME ZONE` first and Postgres converts to
+    the server's UTC, pushing 1 January into the previous year -- which
+    splits ten local years into ELEVEN partial ones and drags every
+    per-year average down by roughly 9%.
+
+    The dataset is exactly ten complete local years (ingest/sites.py, YEARS
+    = 2016..2025), so the year count is the discriminator. Nothing else
+    caught this: the corrupted values stay inside the README's published
+    ranges, which is what makes it the kind of bug this project keeps
+    meeting -- silent, plausible, wrong.
+    """
+    body = client.get(f"/api/sites/{site_ids['Karoo']}/reliability").json()
+    assert body["annual"]["years"] == 10

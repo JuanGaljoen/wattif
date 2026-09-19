@@ -209,7 +209,7 @@ them is not recomputing the answer the way the code computes it.
       `tests/test_compression.py`
 - [x] **CP2** — the reliability endpoint · files: `api/reliability.py`,
       `api/main.py`, `tests/test_api.py`
-- [ ] **CP3** — the view · files: `web/app.js`, `web/index.html`,
+- [x] **CP3** — the view · files: `web/app.js`, `web/index.html`,
       `web/style.css`, `README.md`
 
 ## For Chronicle
