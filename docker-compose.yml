@@ -18,5 +18,19 @@ services:
       timeout: 3s
       retries: 30
 
+  api:
+    build: .
+    environment:
+      # The db service, not localhost: inside the compose network the
+      # hostname is the service name.
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/resource
+      # Optional. Empty -> the map falls back to OSM tiles inverted in CSS.
+      CARTO_KEY: ${CARTO_KEY:-}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   pgdata:

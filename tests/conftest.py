@@ -6,16 +6,11 @@ a Python callable.
 """
 from __future__ import annotations
 
-import os
-
 import psycopg
 import pytest
 
+from config import DSN
 from models import apply_models
-
-DSN = os.environ.get(
-    "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/resource"
-)
 
 
 @pytest.fixture(scope="session")

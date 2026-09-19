@@ -27,8 +27,14 @@ shape. 5a proves the contract with a real screen.
       `(day, pv_cf, wind_cf)`, served from `daily_cf`, warm response under
       ~200 ms
 - [ ] `days[0]` is **`2016-01-01`** — the local-date serialisation is right
-- [ ] `docker compose up` from a clean clone → `http://localhost:8000`
-      renders the map with six markers, no manual step
+- [ ] `docker compose up` **against a seeded database** →
+      `http://localhost:8000` renders the map with six markers, no manual
+      step. *(Amended at CP1's Verify: a genuinely clean clone cannot show
+      six markers, because `db/schema.sql` runs on an empty volume and
+      creates tables only. The API now installs the runtime DDL itself at
+      startup, so a clean clone returns an empty list rather than a 500 —
+      but the DATA needs the backfill or PLAN.md's slice-6 seed dump. No
+      code in 5a can conjure ten years of weather.)*
 - [ ] Clicking a marker draws both series
 - [ ] **PV visibly peaks Dec–Feb** — the azimuth trap, now visible on screen
       rather than only asserted in a test
@@ -211,7 +217,7 @@ is one more place they can reappear.
 
 ## Checkpoints
 
-- [ ] **CP1** — API + container · files: `config.py`, `api/*`,
+- [x] **CP1** — API + container · files: `config.py`, `api/*`,
       `timescale/__init__.py`, `Dockerfile`, `docker-compose.yml`,
       `requirements.txt`, `ingest/load.py`, `tests/conftest.py`,
       `tests/test_api.py`

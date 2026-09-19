@@ -12,9 +12,10 @@ Commits per site-year, not per run: a crash costs at most one year
 from __future__ import annotations
 
 import argparse
-import os
 
 import psycopg
+
+from config import DSN
 
 # Re-exported for backward compatibility: upsert_site, load and COPY_COLUMNS
 # used to live here (slice 1); they moved to backfill.py to break a circular
@@ -28,10 +29,6 @@ from .backfill import (  # noqa: F401 -- some re-exported, see module docstring
     upsert_site,
 )
 from .sites import SITES, YEARS
-
-DSN = os.environ.get(
-    "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/resource"
-)
 
 # Backward-compat alias -- tests/test_pv.py pins the azimuth trap against
 # this name (slice 2, before the multi-site registry existed).
