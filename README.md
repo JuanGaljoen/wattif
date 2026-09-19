@@ -6,11 +6,29 @@ Pick a point on a map. See what a solar or wind farm there would have generated,
 hour by hour, over ten years of real weather — and how reliable it would
 actually have been.
 
-**Status: slice 4 of 6.** Six South African sites, ten years each:
+**Status: slice 5a of 6.** Six South African sites, ten years each:
 **526,032 hourly rows**, rolled up into a daily continuous aggregate
 (**21,918 rows**) over the generation expression, with the hypertable
-compressed **74 MB → 23 MB (3.2×)**. See [PLAN.md](PLAN.md) for the build
-order and [specs/slice-4.md](specs/slice-4.md) for this slice's plan.
+compressed **74 MB → 23 MB (3.2×)** — and now a map and a generation chart
+over the top of it. See [PLAN.md](PLAN.md) for the build order and
+[specs/slice-5a.md](specs/slice-5a.md) for this slice's plan.
+
+```sh
+docker compose up -d          # db + api
+open http://localhost:8000
+```
+
+Two containers, no Caddy and no Node: FastAPI serves the JSON and the
+frontend on one origin, and the frontend has no build step at all
+([`docs/adr/0006`](docs/adr/0006-no-reverse-proxy-until-there-is-a-domain.md)).
+
+**A fresh clone shows an empty map.** The structures install themselves at
+startup, but nobody has the weather — run the backfill below, or wait for
+slice 6's seed dump.
+
+**Optional:** set `CARTO_KEY` (free, [carto.com/basemaps/apikey](https://carto.com/basemaps/apikey/))
+for the Dark Matter basemap. Without it the map falls back to OpenStreetMap
+tiles inverted in CSS — still dark, still correct.
 
 ## The six sites
 
