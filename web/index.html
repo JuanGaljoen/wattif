@@ -11,6 +11,7 @@
 <!-- Everything is vendored. No CDN, no build step, no npm: the page is
      served as-is by FastAPI (specs/slice-5a.md, Frontend). -->
 <link rel="stylesheet" href="vendor/leaflet.css">
+<link rel="stylesheet" href="vendor/uPlot.min.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -35,7 +36,21 @@
   </dl>
 </section>
 
+<section class="chart-dock">
+  <div class="chart-head">
+    <h2 id="chart-title">Daily generation</h2>
+    <label class="capacity">
+      Rated capacity
+      <input id="capacity" type="number" value="100" min="1" max="10000" step="10"
+             aria-label="Rated capacity in megawatts">
+      MW
+    </label>
+  </div>
+  <div id="chart"></div>
+</section>
+
 <script src="vendor/leaflet.js"></script>
+<script src="vendor/uPlot.iife.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

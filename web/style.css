@@ -40,8 +40,14 @@
   --edge:    #2a3846;
   --ink:     #e8edf2;
   --ink-dim: #93a3b4;
-  --solar:   #f2a03d;
-  --wind:    #4fc3d9;
+  /* The two series, everywhere they appear -- marker, line, accent. Both
+     validated against this surface for the dark-mode lightness band, chroma
+     floor, CVD separation (protan dE 19.5) and 3:1 contrast. The brighter
+     amber/cyan I first chose sat at L 0.77, outside the 0.48-0.67 band. */
+  --solar:   #c87d22;
+  --wind:    #35a3bd;
+
+  --chart-h: clamp(220px, 34vh, 340px);
 
   --sans: 'Barlow', system-ui, sans-serif;
   --cond: 'Barlow Semi Condensed', 'Barlow', system-ui, sans-serif;
@@ -62,7 +68,8 @@ html, body {
 /* The map is the hero: full bleed, everything else floats over it. */
 #map {
   position: fixed;
-  inset: 0;
+  top: 0; left: 0; right: 0;
+  bottom: var(--chart-h);
   background: var(--deep);
 }
 
@@ -132,7 +139,7 @@ html, body {
 
 .detail {
   position: fixed;
-  bottom: 24px; left: 24px;
+  bottom: calc(var(--chart-h) + 24px); left: 24px;
   z-index: 500;
   width: 268px;
   padding: 16px 18px;
@@ -209,5 +216,72 @@ html, body {
     overflow-x: auto;
   }
   .sites button { border-bottom: 0; border-right: 1px solid var(--edge); white-space: nowrap; }
-  .detail { bottom: 74px; left: 16px; right: 16px; width: auto; }
+  .detail { left: 16px; right: 16px; width: auto; }
+}
+
+
+/* ---- the generation chart ---------------------------------------------- */
+
+.chart-dock {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  height: var(--chart-h);
+  padding: 14px 24px 10px;
+  background: var(--panel);
+  border-top: 1px solid var(--edge);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* flex child that is allowed to shrink: without min-height:0 it refuses to
+   go below its content and pushes the legend past the dock's edge. */
+#chart { flex: 1; min-height: 0; }
+
+.chart-head {
+  display: flex;
+  align-items: baseline;
+  gap: 24px;
+  margin-bottom: 10px;
+}
+
+.chart-head h2 {
+  margin: 0;
+  font-family: var(--cond);
+  font-size: 19px;
+  font-weight: 500;
+}
+
+.capacity {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-left: auto;
+  font-family: var(--cond);
+  color: var(--ink-dim);
+}
+
+.capacity input {
+  width: 74px;
+  padding: 3px 7px;
+  background: var(--deep);
+  border: 1px solid var(--edge);
+  border-radius: 2px;
+  color: var(--ink);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* uPlot brought into the palette. Its own legend carries series identity,
+   so colour is never the only cue. */
+.uplot, .u-legend { font-family: var(--cond); }
+.u-legend { color: var(--ink-dim); font-size: 14px; }
+.u-legend .u-value { color: var(--ink); font-variant-numeric: tabular-nums; }
+.u-select { background: rgba(200, 125, 34, 0.18); }
+
+@media (max-width: 720px) {
+  .chart-dock { padding: 12px 16px 8px; }
+  .chart-head { gap: 12px; }
+  .detail { bottom: calc(var(--chart-h) + 74px); }
 }

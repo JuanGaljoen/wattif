@@ -187,3 +187,12 @@ def test_vendored_assets_are_served(client, path):
     missing or mis-pathed vendored file is a blank screen, not an error.
     """
     assert client.get(path).status_code == 200
+
+
+def test_uplot_assets_are_served():
+    """uPlot is vendored like everything else; the chart is a blank panel if
+    either file is missing, with no error anywhere.
+    """
+    with TestClient(create_app()) as c:
+        assert c.get("/vendor/uPlot.iife.min.js").status_code == 200
+        assert c.get("/vendor/uPlot.min.css").status_code == 200

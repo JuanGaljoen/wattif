@@ -223,7 +223,7 @@ is one more place they can reappear.
       `tests/test_api.py`
 - [x] **CP2** — map · files: `web/index.html`, `web/app.js`,
       `web/style.css`, `web/vendor/*`, `.env.example`
-- [ ] **CP3** — chart + capacity · files: `web/app.js`, `web/style.css`,
+- [x] **CP3** — chart + capacity · files: `web/app.js`, `web/style.css`,
       `README.md`
 
 ## For Chronicle
