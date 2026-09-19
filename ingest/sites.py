@@ -21,11 +21,11 @@ SITES = [
               tilt_deg=28.0, azimuth_deg=180.0),
     SiteSpec(name="Cape West Coast", latitude=-32.80, longitude=18.15,
               tilt_deg=33.0, azimuth_deg=180.0),
-    SiteSpec(name="Port Elizabeth", latitude=-33.96, longitude=25.60,
+    SiteSpec(name="Gqeberha", latitude=-33.96, longitude=25.60,
               tilt_deg=34.0, azimuth_deg=180.0),
-    SiteSpec(name="Free State", latitude=-28.50, longitude=26.80,
+    SiteSpec(name="Theunissen", latitude=-28.50, longitude=26.80,
               tilt_deg=29.0, azimuth_deg=180.0),
-    SiteSpec(name="Limpopo", latitude=-23.90, longitude=29.45,
+    SiteSpec(name="Polokwane", latitude=-23.90, longitude=29.45,
               tilt_deg=24.0, azimuth_deg=180.0),
 ]
 

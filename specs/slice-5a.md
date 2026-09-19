@@ -221,7 +221,7 @@ is one more place they can reappear.
       `timescale/__init__.py`, `Dockerfile`, `docker-compose.yml`,
       `requirements.txt`, `ingest/load.py`, `tests/conftest.py`,
       `tests/test_api.py`
-- [ ] **CP2** — map · files: `web/index.html`, `web/app.js`,
+- [x] **CP2** — map · files: `web/index.html`, `web/app.js`,
       `web/style.css`, `web/vendor/*`, `.env.example`
 - [ ] **CP3** — chart + capacity · files: `web/app.js`, `web/style.css`,
       `README.md`

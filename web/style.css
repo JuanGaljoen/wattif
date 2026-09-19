@@ -1,0 +1,213 @@
+/* wattif — infrastructure siting, not a SaaS dashboard.
+   Amber is solar and cyan is wind, everywhere they appear: on a marker, on
+   a chart line, in a value. Colour carries the resource, so nothing needs a
+   legend to be read. */
+
+@font-face {
+  font-family: 'Barlow';
+  src: url('vendor/fonts/barlow-400.woff2') format('woff2');
+  font-weight: 400; font-display: swap;
+}
+@font-face {
+  font-family: 'Barlow';
+  src: url('vendor/fonts/barlow-500.woff2') format('woff2');
+  font-weight: 500; font-display: swap;
+}
+@font-face {
+  font-family: 'Barlow';
+  src: url('vendor/fonts/barlow-600.woff2') format('woff2');
+  font-weight: 600; font-display: swap;
+}
+@font-face {
+  font-family: 'Barlow Semi Condensed';
+  src: url('vendor/fonts/barlow-semi-condensed-400.woff2') format('woff2');
+  font-weight: 400; font-display: swap;
+}
+@font-face {
+  font-family: 'Barlow Semi Condensed';
+  src: url('vendor/fonts/barlow-semi-condensed-500.woff2') format('woff2');
+  font-weight: 500; font-display: swap;
+}
+@font-face {
+  font-family: 'Barlow Semi Condensed';
+  src: url('vendor/fonts/barlow-semi-condensed-600.woff2') format('woff2');
+  font-weight: 600; font-display: swap;
+}
+
+:root {
+  --deep:    #131c27;
+  --panel:   #1a242f;
+  --edge:    #2a3846;
+  --ink:     #e8edf2;
+  --ink-dim: #93a3b4;
+  --solar:   #f2a03d;
+  --wind:    #4fc3d9;
+
+  --sans: 'Barlow', system-ui, sans-serif;
+  --cond: 'Barlow Semi Condensed', 'Barlow', system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  background: var(--deep);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* The map is the hero: full bleed, everything else floats over it. */
+#map {
+  position: fixed;
+  inset: 0;
+  background: var(--deep);
+}
+
+/* Fallback basemap only. OSM's tiles are light, so they are inverted into
+   a dark map; Dark Matter is already dark and must NOT get this filter, or
+   it inverts back to white. */
+#map.invert-tiles .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9)
+          saturate(0.75);
+}
+
+.masthead {
+  position: fixed;
+  top: 24px; left: 24px;
+  z-index: 500;
+  max-width: 24ch;
+}
+
+.masthead h1 {
+  margin: 0;
+  font-family: var(--cond);
+  font-size: 40px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+
+.masthead p {
+  margin: 4px 0 0;
+  color: var(--ink-dim);
+  font-size: 15px;
+}
+
+.sites {
+  position: fixed;
+  top: 24px; right: 24px;
+  z-index: 500;
+  width: 232px;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  border: 1px solid var(--edge);
+  border-radius: 3px;
+  backdrop-filter: blur(8px);
+  overflow: hidden;
+}
+
+.sites button {
+  display: block;
+  width: 100%;
+  padding: 9px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--edge);
+  background: none;
+  color: var(--ink);
+  font-family: var(--cond);
+  font-size: 16px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sites button:last-child { border-bottom: 0; }
+.sites button:hover { background: #22303d; }
+
+.sites button[aria-current='true'] {
+  background: #22303d;
+  box-shadow: inset 3px 0 0 var(--solar);
+}
+
+.detail {
+  position: fixed;
+  bottom: 24px; left: 24px;
+  z-index: 500;
+  width: 268px;
+  padding: 16px 18px;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  border: 1px solid var(--edge);
+  border-radius: 3px;
+  backdrop-filter: blur(8px);
+}
+
+.detail[hidden] { display: none; }
+
+.detail h2 {
+  margin: 0 0 12px;
+  font-family: var(--cond);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+/* Label/value rows rather than a run-on meta string: each fact is findable,
+   and the numbers line up. */
+.detail dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 5px 16px;
+  margin: 0;
+  font-family: var(--cond);
+  font-size: 15px;
+}
+
+.detail dt { color: var(--ink-dim); }
+
+.detail dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--solar);
+  outline-offset: -2px;
+}
+
+/* Leaflet's own chrome, brought into the palette. */
+.leaflet-container { background: var(--deep); font-family: var(--sans); }
+
+.leaflet-control-attribution {
+  background: color-mix(in srgb, var(--panel) 88%, transparent) !important;
+  color: var(--ink-dim) !important;
+  font-size: 11px !important;
+}
+
+.leaflet-control-attribution a { color: var(--ink-dim) !important; }
+
+.leaflet-control-zoom a {
+  background: var(--panel) !important;
+  border-color: var(--edge) !important;
+  color: var(--ink) !important;
+}
+
+.leaflet-control-zoom a:hover { background: #22303d !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
+@media (max-width: 720px) {
+  .masthead { top: 16px; left: 16px; }
+  .masthead h1 { font-size: 30px; }
+  .sites {
+    top: auto; bottom: 16px; right: 16px; left: 16px;
+    width: auto;
+    display: flex;
+    overflow-x: auto;
+  }
+  .sites button { border-bottom: 0; border-right: 1px solid var(--edge); white-space: nowrap; }
+  .detail { bottom: 74px; left: 16px; right: 16px; width: auto; }
+}

@@ -6,11 +6,24 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
+from config import CARTO_KEY
 from timescale import SITE_TIMEZONE
 
 from .db import cursor
 
 router = APIRouter(prefix="/api")
+
+
+@router.get("/config")
+def client_config() -> dict:
+    """What the page needs from the environment, and cannot read itself.
+
+    CARTO_KEY is not a secret: it travels in every tile URL and is visible
+    in devtools. Serving it here keeps it out of a committed file and lets
+    the page pick its basemap -- Dark Matter when a key is set, OSM
+    inverted in CSS when it is not (specs/slice-5a.md, Basemap).
+    """
+    return {"carto_key": CARTO_KEY}
 
 
 @router.get("/sites")

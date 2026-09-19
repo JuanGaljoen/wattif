@@ -23,9 +23,9 @@ slice 4's continuous aggregate to a single constant timezone literal
 | Karoo | -32.25 | 22.55 | solar |
 | Upington | -28.45 | 21.26 | solar++ |
 | Cape West Coast | -32.80 | 18.15 | wind |
-| Port Elizabeth | -33.96 | 25.60 | wind |
-| Free State | -28.50 | 26.80 | both |
-| Limpopo | -23.90 | 29.45 | solar |
+| Gqeberha | -33.96 | 25.60 | wind |
+| Theunissen | -28.50 | 26.80 | both |
+| Polokwane | -23.90 | 29.45 | solar |
 
 ## Running it
 

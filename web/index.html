@@ -1,8 +1,41 @@
 <!doctype html>
+<html lang="en">
+<head>
 <meta charset="utf-8">
-<title>wattif</title>
-<!-- Placeholder. CP2 builds the real page (map); CP3 adds the chart.
-     It exists now so the StaticFiles mount is real and its ordering
-     against /api/* is pinned by a test rather than discovered later. -->
-<h1>wattif</h1>
-<p>Watt if you'd built it there?</p>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>wattif — what a solar or wind farm would have generated</title>
+<meta name="description"
+      content="Six South African sites, ten years of real weather, and what a
+               solar or wind farm at each would have generated.">
+
+<!-- Everything is vendored. No CDN, no build step, no npm: the page is
+     served as-is by FastAPI (specs/slice-5a.md, Frontend). -->
+<link rel="stylesheet" href="vendor/leaflet.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="map"></div>
+
+<header class="masthead">
+  <h1>wattif</h1>
+  <p>Watt if you'd built it there?</p>
+</header>
+
+<nav class="sites" id="sites" aria-label="Sites"></nav>
+
+<section class="detail" id="detail" hidden>
+  <h2 id="detail-name"></h2>
+  <dl>
+    <dt>Latitude</dt>      <dd id="detail-lat"></dd>
+    <dt>Longitude</dt>     <dd id="detail-lon"></dd>
+    <dt>Elevation</dt>     <dd id="detail-elev"></dd>
+    <dt>Panel tilt</dt>    <dd id="detail-tilt"></dd>
+    <dt>Panels face</dt>   <dd id="detail-facing"></dd>
+  </dl>
+</section>
+
+<script src="vendor/leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

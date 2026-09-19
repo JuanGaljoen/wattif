@@ -8,13 +8,18 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Only what the API imports at runtime: api -> timescale (SITE_TIMEZONE)
-# -> psycopg, plus config and the static files. models/, ingest/ and data/
-# are deliberately absent -- the model functions and the aggregate already
-# live in the database; this image only reads them.
+# What the API imports at runtime, and nothing else.
+#
+# models/ and data/ are here because startup applies the runtime DDL
+# (api/__init__.py, lifespan) -- apply_models generates the SQL from the
+# Python constants, and models/curve.py reads the vendored turbine curve out
+# of data/ to do it. ingest/ stays out: this image only reads the database,
+# it never fills it.
 COPY config.py .
 COPY api/ api/
+COPY models/ models/
 COPY timescale/ timescale/
+COPY data/ data/
 COPY web/ web/
 
 EXPOSE 8000

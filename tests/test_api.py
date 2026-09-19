@@ -44,9 +44,9 @@ def test_sites_lists_the_six_seeded_sites(client):
         "Karoo",
         "Upington",
         "Cape West Coast",
-        "Port Elizabeth",
-        "Free State",
-        "Limpopo",
+        "Gqeberha",
+        "Theunissen",
+        "Polokwane",
     }
 
     karoo = by_name["Karoo"]
@@ -157,3 +157,33 @@ def test_startup_installs_the_runtime_ddl(monkeypatch):
         pass
 
     assert called == ["models", "timescale"]
+
+
+def test_config_exposes_the_basemap_key_to_the_page(client, monkeypatch):
+    """The page is a static file, so it cannot read the environment.
+
+    Not a secret -- CARTO_KEY travels in every tile URL and is readable in
+    devtools (specs/slice-5a.md, Basemap). This endpoint exists so the key
+    is not baked into a committed file, and so the page can choose its
+    fallback when there is none.
+    """
+    body = client.get("/api/config").json()
+    assert "carto_key" in body
+    assert isinstance(body["carto_key"], str)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/style.css",
+        "/app.js",
+        "/vendor/leaflet.js",
+        "/vendor/leaflet.css",
+        "/vendor/fonts/barlow-400.woff2",
+    ],
+)
+def test_vendored_assets_are_served(client, path):
+    """The page loads these by relative path and has no build step, so a
+    missing or mis-pathed vendored file is a blank screen, not an error.
+    """
+    assert client.get(path).status_code == 200
