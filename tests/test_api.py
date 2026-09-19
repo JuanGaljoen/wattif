@@ -196,3 +196,68 @@ def test_uplot_assets_are_served():
     with TestClient(create_app()) as c:
         assert c.get("/vendor/uPlot.iife.min.js").status_code == 200
         assert c.get("/vendor/uPlot.min.css").status_code == 200
+
+
+# ---- reliability (slice 5b) -----------------------------------------------
+#
+# The oracle is db/reliability.sql's MEASURED values, hardcoded below. They
+# were produced by a different path -- raw weather_hour with the model
+# functions applied inline, not hourly_cf -- so asserting them is not
+# recomputing the answer the way the endpoint computes it.
+
+
+@pytest.fixture(scope="module")
+def site_ids(client):
+    return {s["name"]: s["id"] for s in client.get("/api/sites").json()}
+
+
+def test_worst_24h_matches_the_measured_oracle(client, site_ids):
+    """Two sites, so the first isn't a coincidence.
+
+    Karoo's wind figure is 0.0000 -- a full day of no wind at all, which is
+    the headline the whole reliability view exists to show.
+    """
+    karoo = client.get(f"/api/sites/{site_ids['Karoo']}/reliability").json()
+    assert karoo["worst_24h"]["pv"]["cf"] == pytest.approx(0.0176, abs=5e-5)
+    assert karoo["worst_24h"]["wind"]["cf"] == pytest.approx(0.0000, abs=5e-5)
+
+    gqeberha = client.get(f"/api/sites/{site_ids['Gqeberha']}/reliability").json()
+    assert gqeberha["worst_24h"]["wind"]["cf"] == pytest.approx(0.0012, abs=5e-5)
+
+
+def test_worst_windows_carry_a_timestamp_inside_the_span(client, site_ids):
+    """The chart shades these, so a wrong or missing date is a wrong shade."""
+    body = client.get(f"/api/sites/{site_ids['Karoo']}/reliability").json()
+    for metric in ("worst_24h", "worst_7d"):
+        for resource in ("pv", "wind", "hybrid"):
+            start = body[metric][resource]["start"]
+            assert "2016-01-01" <= start[:10] <= "2025-12-31", (metric, resource)
+
+
+def test_hybrid_lull_is_shallower_than_wind_alone(client, site_ids):
+    """The product's claim, asserted rather than assumed.
+
+    Wind peaks in July and solar in December at these sites, so a 50/50 farm
+    should ride out a lull that flattens either resource on its own. If this
+    ever fails, the claim in the README is wrong -- not the test.
+    """
+    body = client.get(f"/api/sites/{site_ids['Karoo']}/reliability").json()
+    assert body["worst_7d"]["hybrid"]["cf"] > body["worst_7d"]["wind"]["cf"]
+    assert body["worst_24h"]["hybrid"]["cf"] > body["worst_24h"]["wind"]["cf"]
+
+
+def test_hours_below_10pct_are_per_year_not_per_decade(client, site_ids):
+    """The obvious off-by-ten-years mistake.
+
+    The raw ten-year totals are ~44,753 for wind at Karoo. Publishing that
+    as an annual figure would be wrong by exactly the span of the dataset,
+    and would still look like a plausible number.
+    """
+    body = client.get(f"/api/sites/{site_ids['Karoo']}/reliability").json()
+    hours = body["hours_below_10pct"]
+    assert 1_000 < hours["wind"] < 9_000
+    assert 100 < hours["pv_daylight"] < 4_000
+
+
+def test_reliability_unknown_site_is_404(client):
+    assert client.get("/api/sites/999999/reliability").status_code == 404

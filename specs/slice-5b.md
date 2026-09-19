@@ -207,7 +207,7 @@ them is not recomputing the answer the way the code computes it.
 - [x] **CP1** — `hourly_cf` + cagg.py generalised · files: `timescale/cagg.py`,
       `timescale/__init__.py`, `tests/test_timescale.py`,
       `tests/test_compression.py`
-- [ ] **CP2** — the reliability endpoint · files: `api/reliability.py`,
+- [x] **CP2** — the reliability endpoint · files: `api/reliability.py`,
       `api/main.py`, `tests/test_api.py`
 - [ ] **CP3** — the view · files: `web/app.js`, `web/index.html`,
       `web/style.css`, `README.md`
