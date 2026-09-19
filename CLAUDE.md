@@ -268,6 +268,33 @@ ranges. Pick an assertion the bug *cannot* avoid violating
 **The hybrid is `(pv_cf + wind_cf) / 2`** — equal rated capacity, a stated
 product choice sitting in the README's *assumed* column, not an optimum.
 
+## The seed corpus (slice 6)
+
+`data/seed/` is **two CSVs committed to the repo** — `site.csv` and
+`weather_hour.csv.gz` (526,032 rows, 8.5 MB) — and the API restores them at
+startup when `weather_hour` is empty. That is what makes `git clone && docker
+compose up` the whole demo
+([`docs/adr/0011`](docs/adr/0011-the-seed-corpus-ships-in-the-repo.md),
+superseding PLAN.md § Hosting's GitHub Release bullet).
+
+- **The CSVs are positional and generated.** Any change to `db/schema.sql`'s
+  column order means `python -m ingest.seed dump` again. A test pins
+  `SITE_COLUMNS` and `COPY_COLUMNS` against `information_schema` so a
+  misalignment fails loudly rather than shifting every value one column left.
+- **Caggs are never dumped.** They are derived and rebuild in ~45 s; dumping
+  one needs `timescaledb_pre_restore()`/`post_restore()`, which pins the file
+  to an extension version.
+- **Site ids survive the round trip**, so `/api/sites/1/daily` keeps meaning
+  what it meant. Inserting explicit ids leaves the serial behind, so `restore`
+  `setval`s past them — without that the next real insert collides.
+- **The image now carries `ingest/`.** Startup imports `ingest.seed`, so the
+  Dockerfile comment saying ingest stays out is gone. This is
+  [`docs/adr/0008`](docs/adr/0008-runtime-ddl-needs-a-production-caller.md)'s
+  closing lesson repeating itself: **local tests are not the image's import
+  graph, and only a clean-volume cold start catches the difference.** Run
+  `docker compose down -v && docker compose up` before shipping anything that
+  touches startup.
+
 ## Known gaps
 
 - [x] ~~PLAN.md's "cagg groups on `local_date`" design is invalid~~ — resolved
@@ -276,15 +303,16 @@ product choice sitting in the README's *assumed* column, not an optimum.
       [`docs/adr/0001`](docs/adr/0001-cagg-cannot-group-on-local-date.md).
 - [x] ~~`ingest_job.rows` records rows inserted *this run*, not rows held~~ —
       fixed in slice 3 (`ingest/backfill.py`, `backfill_one`).
-- [ ] **A clean clone has no data.** Slice 5a made the *structures*
-      self-installing, so a fresh database answers `[]` and `404` rather
-      than 500 — but `docker compose up` still shows an empty map until
-      someone runs the backfill (~1,570 API calls). PLAN.md's slice-6 seed
-      dump is what closes this, and it is the last thing standing between
-      "clone it" and "clone it and see the product".
+- [x] ~~**A clean clone has no data.**~~ — closed in slice 6: `data/seed/`
+      ships the corpus in the repo and the API restores it on first start.
+      See *The seed corpus* above.
 - [x] ~~Smoothing hides the lulls~~ — resolved in slice 5b: the daily
       series is drawn at full strength with the 30-day mean beneath it, and
       either layer toggles off.
+- [ ] **The README has no GIF or stills.** PLAN's item 6 asks for them and
+      everything else in that item landed; a screen recording is the one
+      part an agent cannot produce. Nothing depends on it — it is the
+      difference between a reviewer who clones and a reviewer who scrolls.
 - [ ] **No hourly series is served.** `hourly_cf` holds hourly values and
       the reliability endpoint reads them, but `/daily` is the only series
       endpoint — so the chart bottoms out at daily resolution and you cannot

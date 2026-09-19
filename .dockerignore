@@ -1,0 +1,13 @@
+# The build context is the repo root, and data/seed/ is 8.8 MB of it -- worth
+# keeping everything that is not the image out, so the context stays small
+# and a rebuild doesn't invalidate on a stray .pyc.
+.git/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+tests/
+specs/
+docs/
+db/
+*.md

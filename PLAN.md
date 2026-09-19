@@ -158,10 +158,13 @@ no Timescale Toolkit — plain `timescale/timescaledb:2.x-pg17` is enough.
      endpoints, a no-build-step frontend. See `specs/slice-5a.md`.
    - **5b — DONE. The reliability view.** `hourly_cf`, the metrics endpoint
      and the panel. See `specs/slice-5b.md`.
-6. **Package it.** Seed dump published to a GitHub Release (the thing standing
-   between "clone it" and "clone it and see the product"), README with the GIF,
-   the measured numbers, and verified-vs-assumed split out. No Caddy — see
-   Hosting.
+6. **DONE — Package it.** The seed corpus ships **in the repo** as CSV, not in
+   a GitHub Release — 8.5 MB measured against the ~30 MB this plan assumed, so
+   `git clone && docker compose up` needs no download
+   ([`docs/adr/0011`](docs/adr/0011-the-seed-corpus-ships-in-the-repo.md),
+   which supersedes the Release bullet under Hosting). README carries the
+   measured numbers and the verified-vs-assumed split. No Caddy — see Hosting.
+   See `specs/slice-6.md`. **Still owed: the GIF and stills.**
 
 ---
 
@@ -197,11 +200,14 @@ There is still **no Node in production** — the frontend has no build step at
 all, so there is no `dist/` to serve.
 
 **What replaces the live URL, and must be as good:**
-- **A seed dump in a GitHub Release.** `pg_dump` of the corpus, gzipped — ~30 MB
-  at 6 sites, well inside the 2 GB asset limit, and not in the repo. `compose
-  up` restores a populated database in seconds with no API calls and no quota.
-  CC BY 4.0 permits redistributing derived data with attribution and a
-  modification notice, which is already committed to.
+- ~~**A seed dump in a GitHub Release.**~~ **Superseded by
+  [`docs/adr/0011`](docs/adr/0011-the-seed-corpus-ships-in-the-repo.md):** the
+  corpus is two CSVs committed at `data/seed/`, restored by the API on first
+  start. The ~30 MB estimate that kept it out of the repo was wrong — the
+  measured gzip of `site` + `weather_hour` is 8.5 MB, and a Release asset adds
+  a download and a token to the one command that is meant to be the whole
+  story. CC BY 4.0 permits redistributing derived data with attribution and a
+  modification notice, which is given in the README.
 - **A recorded GIF plus stills in the README.** Reviewers who care will clone
   it; reviewers who don't will scroll. Both are served.
 

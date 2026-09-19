@@ -14,10 +14,12 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from ingest.seed import WEATHER_GZ, is_empty, restore
 from models import apply_models
-from timescale import apply_timescale
+from timescale import apply_timescale, compress_all, refresh_cagg
+from timescale.cagg import CAGGS
 
-from .db import close_pool, ddl_cursor, open_pool
+from .db import close_pool, ddl_cursor, open_pool, pool_connection
 from .main import router
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
@@ -46,9 +48,51 @@ async def lifespan(app: FastAPI):
         with ddl_cursor() as cur:
             apply_models(cur)
             apply_timescale(cur)
+        _seed_if_empty()
         yield
     finally:
         close_pool()
+
+
+def _seed_if_empty() -> None:
+    """Restore the bundled corpus into a database that has none.
+
+    This is what makes `docker compose up` the whole story. Structures
+    install themselves (docs/adr/0008) but no code can conjure ten years of
+    weather, so a clean clone rendered a correct and entirely empty map
+    until this ran.
+
+    Guarded on weather_hour being empty, so it fires exactly once per
+    volume and never touches a database someone has backfilled. Synchronous
+    and logged: it takes about a minute, and a server that looks hung is
+    worse than one that says what it is doing.
+    """
+    with ddl_cursor() as cur:
+        if not is_empty(cur):
+            return
+        if not WEATHER_GZ.exists():
+            print(f"[seed] empty database and no seed at {WEATHER_GZ} -- "
+                  f"run `python -m ingest.load` to backfill from Open-Meteo",
+                  flush=True)
+            return
+
+    print("[seed] empty database: restoring the bundled corpus", flush=True)
+    with pool_connection() as conn:
+        inserted = restore(conn)
+        conn.commit()
+        print(f"[seed]   {inserted:,} rows", flush=True)
+        for cagg in CAGGS:
+            print(f"[seed]   materialising {cagg.name}", flush=True)
+            refresh_cagg(conn, cagg.name)
+
+        # The policy would get here on its own within 12 hours. That is 12
+        # hours of a clone sitting at 74 MB while the README advertises 23,
+        # and of tests/test_compression.py having no compressed chunk to
+        # assert against. It costs ~1.3 s, so it is not worth deferring.
+        chunks, before, after = compress_all(conn)
+        print(f"[seed]   compressed {chunks} chunks, {before} -> {after}",
+              flush=True)
+    print("[seed] ready", flush=True)
 
 
 def create_app() -> FastAPI:
