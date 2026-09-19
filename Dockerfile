@@ -13,10 +13,16 @@ RUN pip install --no-cache-dir -r requirements.txt
 # models/ and data/ are here because startup applies the runtime DDL
 # (api/__init__.py, lifespan) -- apply_models generates the SQL from the
 # Python constants, and models/curve.py reads the vendored turbine curve out
-# of data/ to do it. ingest/ stays out: this image only reads the database,
-# it never fills it.
+# of data/ to do it.
+#
+# ingest/ used to stay out on the grounds that this image only reads the
+# database. Slice 6 made that false: startup restores the bundled seed corpus
+# into an empty database (ingest/seed.py, and data/seed/ which COPY data/
+# brings in). It still never calls Open-Meteo -- ingest/openmeteo.py rides
+# along only because seed.py shares COPY_COLUMNS with backfill.py.
 COPY config.py .
 COPY api/ api/
+COPY ingest/ ingest/
 COPY models/ models/
 COPY timescale/ timescale/
 COPY data/ data/

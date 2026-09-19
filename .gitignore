@@ -6,3 +6,7 @@ __pycache__/
 # except the vendored turbine curve models/curve.py loads at runtime -- not
 # downloaded weather data, a checked-in dependency (data/LICENSE-NREL).
 !data/IEA_Reference_3.4MW_130.csv
+# ...and the seed corpus. 8.5 MB gzipped, which is small enough to ship in
+# the repo -- PLAN assumed ~30 MB and kept it out on that basis. In-repo
+# means `git clone && docker compose up` needs no download and no network.
+!data/seed/site.csv

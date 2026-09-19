@@ -6,25 +6,46 @@ Pick a point on a map. See what a solar or wind farm there would have generated,
 hour by hour, over ten years of real weather — and how reliable it would
 actually have been.
 
-**Status: slice 5b of 6.** Six South African sites, ten years each:
-**526,032 hourly rows**, rolled up into a daily continuous aggregate
-(**21,918 rows**) over the generation expression, with the hypertable
-compressed **74 MB → 23 MB (3.2×)** — and now a map and a generation chart
-over the top of it. See [PLAN.md](PLAN.md) for the build order and
-[specs/slice-5b.md](specs/slice-5b.md) for this slice's plan.
+**Status: slice 6 of 6 — complete.** Six South African sites, ten years
+each: **526,032 hourly rows**, rolled up into a daily continuous aggregate
+(**21,918 rows**) and an hourly one over the generation expression, with the
+hypertable compressed **74 MB → 23 MB (3.2×)** — under a map, a generation
+chart and a reliability panel. See [PLAN.md](PLAN.md) for the build order
+and [specs/slice-6.md](specs/slice-6.md) for this slice's plan.
 
 ```sh
-docker compose up -d          # db + api
+git clone … && cd wattif
+docker compose up            # first run takes ~90 s -- watch it, see below
 open http://localhost:8000
 ```
+
+**That is the whole setup.** Ten years of weather for all six sites ships in
+the repo (`data/seed/`, 8.5 MB gzipped) and restores itself on first start —
+no API keys, no backfill, no Open-Meteo quota. See
+[the seed corpus](#the-seed-corpus) below.
+
+**Run the first start in the foreground**, without `-d`. Restoring the corpus
+happens in the API's startup hook, and uvicorn binds its port only after that
+finishes. Docker publishes 8000 straight away regardless, so for ~90 s the
+connection is accepted and then answered with nothing — a browser shows a
+connection-reset error, which looks exactly like a broken build. `-d` sends
+the only evidence to the contrary to a log nobody is watching:
+
+```
+[seed] empty database: restoring the bundled corpus
+[seed]   526,032 rows
+[seed]   materialising daily_cf
+[seed]   materialising hourly_cf
+[seed]   compressed 122 chunks, 74 MB -> 23 MB
+[seed] ready
+```
+
+`[seed] ready` is the cue to open the page. Every start after that is
+immediate, and `-d` is the right flag from then on.
 
 Two containers, no Caddy and no Node: FastAPI serves the JSON and the
 frontend on one origin, and the frontend has no build step at all
 ([`docs/adr/0006`](docs/adr/0006-no-reverse-proxy-until-there-is-a-domain.md)).
-
-**A fresh clone shows an empty map.** The structures install themselves at
-startup, but nobody has the weather — run the backfill below, or wait for
-slice 6's seed dump.
 
 **Optional:** set `CARTO_KEY` (free, [carto.com/basemaps/apikey](https://carto.com/basemaps/apikey/))
 for the Dark Matter basemap. Without it the map falls back to OpenStreetMap
@@ -45,17 +66,57 @@ slice 4's continuous aggregate to a single constant timezone literal
 | Theunissen | -28.50 | 26.80 | both |
 | Polokwane | -23.90 | 29.45 | solar |
 
+## The seed corpus
+
+`data/seed/` holds the ten years, as two CSV files: `site.csv` (6 rows) and
+`weather_hour.csv.gz` (526,032 rows, 8.5 MB gzipped). On first start the API
+notices `weather_hour` is empty, restores them, and materialises both
+continuous aggregates. It is guarded on that emptiness, so it happens exactly
+once per volume and never touches a database you have filled yourself.
+
+On the same pass it compresses every chunk (**74 MB → 23 MB**, ~1.3 s), so a
+fresh clone matches the figure quoted at the top of this file rather than
+waiting up to 12 hours for the compression policy to catch up.
+
+The aggregates are **not** in the corpus — they are derived, and rebuild in
+about 45 s. Dumping a continuous aggregate means
+`timescaledb_pre_restore()` / `post_restore()`, which pins the file to a
+TimescaleDB version; CSV restores with `COPY` against any of them.
+See [`docs/adr/0011`](docs/adr/0011-the-seed-corpus-ships-in-the-repo.md) for
+why this is in the repo rather than a GitHub Release.
+
+```sh
+python -m ingest.seed restore            # into an existing empty database
+python -m ingest.seed dump               # re-dump after a schema change
+```
+
+Re-dump after **any change to `db/schema.sql`'s column order** — the CSVs are
+positional. A test pins both column lists against `information_schema` so
+that failure is loud rather than a silent misalignment.
+
 ## Running it
 
 ```sh
-docker compose up -d
-.venv/bin/python -m ingest.load                 # all 6 sites, 2016-2025
-.venv/bin/python -m ingest.load --year 2024      # one year, all sites
-.venv/bin/python -m ingest.load --site Karoo     # one site, all years
+docker compose up -d        # everything: schema, functions, aggregates, data
 docker compose exec -T db psql -U postgres -d resource -f /dev/stdin < db/verify.sql
 docker compose exec -T db psql -U postgres -d resource -f /dev/stdin < db/reliability.sql
-.venv/bin/python -m pytest   # tests, against the running DB
+.venv/bin/python -m pytest  # tests, against the running DB
 ```
+
+**Refetching from Open-Meteo** is optional — the corpus already holds
+everything these commands would produce. It exists for adding a site, or
+extending the years:
+
+```sh
+.venv/bin/python -m ingest.load                  # all 6 sites, 2016-2025
+.venv/bin/python -m ingest.load --year 2024      # one year, all sites
+.venv/bin/python -m ingest.load --site Karoo     # one site, all years
+```
+
+Sites are named after the nearest town, and `site.name` is the `ON CONFLICT`
+key — renaming one means an `UPDATE` against the database as well as an edit
+to `ingest/sites.py`, or the next backfill inserts a new empty site and
+orphans the weather rows.
 
 ## Reliability — what it means here
 
@@ -127,6 +188,16 @@ archive, licensed **CC BY 4.0**. Generation figures in this project are
 *modifications*: derived from that data via the PV and wind models described in
 PLAN.md. Open-Meteo's free tier is non-commercial and offers no uptime
 guarantee.
+
+`data/seed/` **redistributes** that data as a derived corpus, which CC BY 4.0
+permits with attribution and a modification notice — both given here. The
+vendored turbine curve (`data/IEA_Reference_3.4MW_130.csv`) is NREL's IEA
+3.4 MW/130 RWT, BSD-3-Clause, licence at `data/LICENSE-NREL`.
+
+**Backups:** all 150 MB of the database is reconstructible — from
+`data/seed/` in about a minute, or from Open-Meteo in ~1,570 API calls, well
+inside a day's quota. That is a property of the architecture, not a corner
+cut: there is nothing here that only exists in one place.
 
 ## The models — verified vs. assumed
 

@@ -40,6 +40,19 @@ def close_pool() -> None:
 
 
 @contextmanager
+def pool_connection():
+    """A whole connection from the pool, for work that owns its transaction.
+
+    The seed restore commits, and the cagg refresh needs autocommit -- both
+    need the connection itself, not a cursor on it.
+    """
+    if _pool is None:
+        raise RuntimeError("connection pool is not open")
+    with _pool.connection() as conn:
+        yield conn
+
+
+@contextmanager
 def ddl_cursor():
     """A DEFAULT (tuple-row) cursor, for the runtime DDL at startup.
 
