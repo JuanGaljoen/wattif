@@ -34,11 +34,25 @@
     <dt>Panel tilt</dt>    <dd id="detail-tilt"></dd>
     <dt>Panels face</dt>   <dd id="detail-facing"></dd>
   </dl>
+
+  <h3>Reliability <span id="reliability-range">all ten years</span></h3>
+  <table class="reliability" id="reliability">
+    <thead>
+      <tr><td></td><th scope="col">Solar</th><th scope="col">Wind</th>
+          <th scope="col">50/50</th></tr>
+    </thead>
+    <tbody id="reliability-body"></tbody>
+  </table>
+  <p class="hint" id="reliability-hint">Pick a lull to mark it on the chart.</p>
 </section>
 
 <section class="chart-dock">
   <div class="chart-head">
     <h2 id="chart-title">Daily generation</h2>
+    <div class="ranges" id="ranges" role="group" aria-label="Time range"></div>
+    <div class="layers" id="layers" role="group" aria-label="Series"></div>
+    <span class="hint chart-hint">drag to zoom &middot; double-click resets &middot;
+      click a legend entry to hide one line</span>
     <label class="capacity">
       Rated capacity
       <input id="capacity" type="number" value="100" min="1" max="10000" step="10"

@@ -141,7 +141,9 @@ html, body {
   position: fixed;
   bottom: calc(var(--chart-h) + 24px); left: 24px;
   z-index: 500;
-  width: 268px;
+  width: 330px;
+  max-height: calc(100vh - var(--chart-h) - 48px);
+  overflow-y: auto;
   padding: 16px 18px;
   background: color-mix(in srgb, var(--panel) 92%, transparent);
   border: 1px solid var(--edge);
@@ -176,6 +178,67 @@ html, body {
   margin: 0;
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+#reliability-range { color: var(--ink); font-weight: 400; }
+
+.detail h3 {
+  margin: 18px 0 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--edge);
+  font-family: var(--cond);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink-dim);
+}
+
+.reliability {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--cond);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.reliability th[scope='col'] { font-weight: 500; text-align: right; padding-bottom: 4px; }
+/* The column heads carry the series colours, so the table reads without
+   cross-referencing the chart's legend. */
+.reliability thead th:nth-child(2) { color: var(--solar); }
+.reliability thead th:nth-child(3) { color: var(--wind); }
+
+.reliability th[scope='row'] {
+  font-weight: 400;
+  text-align: left;
+  color: var(--ink-dim);
+  padding: 3px 10px 3px 0;
+}
+
+.reliability td { text-align: right; padding: 3px 0; }
+.reliability td.na { color: #5d6b7a; }
+
+.reliability button {
+  padding: 1px 5px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.reliability button:hover { border-color: var(--edge); }
+
+.reliability button[aria-pressed='true'] {
+  border-color: var(--ink-dim);
+  background: #22303d;
+}
+
+.hint {
+  margin: 10px 0 0;
+  font-family: var(--cond);
+  font-size: 13px;
+  color: var(--ink-dim);
 }
 
 :focus-visible {
@@ -251,6 +314,44 @@ html, body {
   font-size: 19px;
   font-weight: 500;
 }
+
+.ranges, .layers { display: flex; gap: 4px; }
+
+.layers { margin-left: 10px; }
+.layers button::before {
+  content: '';
+  display: inline-block;
+  width: 7px; height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.layers button[aria-pressed='false']::before { background: none; box-shadow: inset 0 0 0 1px currentColor; }
+
+.ranges button, .layers button {
+  padding: 2px 9px;
+  border: 1px solid var(--edge);
+  border-radius: 2px;
+  background: none;
+  color: var(--ink-dim);
+  font-family: var(--cond);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.ranges button:hover, .layers button:hover { color: var(--ink); border-color: var(--ink-dim); }
+
+.ranges button[aria-pressed='true'] {
+  color: var(--ink);
+  border-color: var(--solar);
+  background: #22303d;
+}
+
+.layers button[aria-pressed='true'] { color: var(--ink); border-color: var(--ink-dim); }
+
+.chart-hint { margin: 0; }
+
+@media (max-width: 900px) { .chart-hint { display: none; } }
 
 .capacity {
   display: flex;

@@ -15,18 +15,26 @@ from config import DSN
 
 _pool: ConnectionPool | None = None
 
+# How many app instances currently hold the pool open. One in production;
+# more in tests, where a second TestClient's lifespan would otherwise close
+# the pool a first one is still using -- which surfaced as
+# "connection pool is not open" in whichever test happened to run next.
+_holders = 0
+
 
 def open_pool() -> None:
-    global _pool
+    global _pool, _holders
     if _pool is None:
         # Six sites and a handful of readers: a small pool is plenty, and
         # `open=True` fails fast at startup rather than on first request.
         _pool = ConnectionPool(DSN, min_size=1, max_size=4, open=True)
+    _holders += 1
 
 
 def close_pool() -> None:
-    global _pool
-    if _pool is not None:
+    global _pool, _holders
+    _holders = max(0, _holders - 1)
+    if _pool is not None and _holders == 0:
         _pool.close()
         _pool = None
 

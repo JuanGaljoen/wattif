@@ -10,13 +10,19 @@ Public interface:
 """
 from __future__ import annotations
 
-from .cagg import CAGG_NAME, SITE_TIMEZONE, ensure_cagg
+from .cagg import CAGGS, DAILY, SITE_TIMEZONE, ensure_cagg
 from .compression import compress_all, ensure_compression, ensure_refresh_policy
 
 # SITE_TIMEZONE is public because the API reads daily_cf too and must use
 # the SAME constant, never a retyped literal: a second copy is how the
 # single-timezone constraint (docs/adr/0001) quietly gets broken.
-__all__ = ["apply_timescale", "refresh_daily_cf", "compress_all", "SITE_TIMEZONE"]
+__all__ = [
+    "apply_timescale",
+    "refresh_cagg",
+    "refresh_daily_cf",
+    "compress_all",
+    "SITE_TIMEZONE",
+]
 
 
 def apply_timescale(cur) -> None:
@@ -29,13 +35,15 @@ def apply_timescale(cur) -> None:
     move data -- refresh_daily_cf and compress_all -- are separate because
     neither can run inside a transaction block.
     """
-    ensure_cagg(cur)
+    for cagg in CAGGS:
+        ensure_cagg(cur, cagg)
     ensure_compression(cur)
-    ensure_refresh_policy(cur, CAGG_NAME)
+    for cagg in CAGGS:
+        ensure_refresh_policy(cur, cagg.name)
 
 
-def refresh_daily_cf(conn, start=None, end=None) -> None:
-    """Materialise the aggregate over a range (None, None = everything).
+def refresh_cagg(conn, name: str, start=None, end=None) -> None:
+    """Materialise one aggregate over a range (None, None = everything).
 
     Separate from apply_timescale because refresh_continuous_aggregate
     cannot run inside a transaction block -- it needs its own autocommit
@@ -54,9 +62,15 @@ def refresh_daily_cf(conn, start=None, end=None) -> None:
             # Explicit casts: a NULL bound parameter has no inferable type,
             # and NULL/NULL is how you ask for the whole range.
             cur.execute(
-                f"CALL refresh_continuous_aggregate('{CAGG_NAME}', "
+                f"CALL refresh_continuous_aggregate('{name}', "
                 f"%s::timestamptz, %s::timestamptz)",
                 (start, end),
             )
     finally:
         conn.autocommit = previous
+
+
+def refresh_daily_cf(conn, start=None, end=None) -> None:
+    """Materialise daily_cf. Kept by name because the README documents it as
+    the thing to run after changing a model coefficient (slice 4)."""
+    refresh_cagg(conn, DAILY.name, start, end)
