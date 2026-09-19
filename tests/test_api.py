@@ -280,3 +280,30 @@ def test_annual_metrics_group_by_the_LOCAL_year(client, site_ids):
     """
     body = client.get(f"/api/sites/{site_ids['Karoo']}/reliability").json()
     assert body["annual"]["years"] == 10
+
+
+def test_worst_7d_window_dates_line_up_with_the_daily_series(client, site_ids):
+    """docs/adr/0007, fifth guise -- and docs/adr/0010's rule applied to it.
+
+    daily_cf.day is a LOCAL-midnight timestamptz, so publishing the raw
+    instant gives the previous calendar date for a UTC+2 site. A range check
+    cannot see that (the shifted date is still a date inside the span), so
+    the discriminator is agreement with the other endpoint: take the
+    reported window's dates, average /daily over exactly those days, and it
+    must reproduce the reported figure. Shift the window by one day and it
+    does not.
+
+    This is also what the chart's shading depends on -- it positions the
+    band by these dates on an axis built from /daily's.
+    """
+    site = site_ids["Karoo"]
+    rel = client.get(f"/api/sites/{site}/reliability").json()
+    daily = client.get(f"/api/sites/{site}/daily").json()
+
+    by_day = dict(zip(daily["days"], daily["pv_cf"]))
+    window = rel["worst_7d"]["pv"]
+    days = [d for d in daily["days"] if window["start"] <= d <= window["end"]]
+
+    assert len(days) == 7, f"expected a 7-day window, got {len(days)}"
+    recomputed = sum(by_day[d] for d in days) / len(days)
+    assert recomputed == pytest.approx(window["cf"], abs=5e-4)

@@ -32,6 +32,19 @@ numeric.
       currently defeats (CLAUDE.md, Known gaps)
 - [ ] All 53 existing tests stay green, plus new ones
 
+### Added after the freeze (asked for at CP3's review)
+
+- [x] The metrics describe the **visible range**, not always the whole
+      decade: `GET /api/sites/{id}/reliability?start=&end=`, re-asked on
+      every change of the chart's x scale (debounced)
+- [x] Metrics that a short window cannot support **go blank with a reason**
+      rather than reporting something misleading — P50/P90 below two full
+      years, worst-7d below seven days
+- [x] Hours below 10% is normalised **per year only when the window spans a
+      year or more**; below that it is the raw count for the window, because
+      extrapolating a winter quarter would overstate wind lulls precisely
+      when they cluster
+
 ## Approach
 
 ### `hourly_cf` — a second cagg, and cagg.py generalised

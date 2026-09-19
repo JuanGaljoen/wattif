@@ -93,7 +93,8 @@ def daily_series(site_id: int) -> dict:
 
 
 @router.get("/sites/{site_id}/reliability")
-def site_reliability(site_id: int) -> dict:
+def site_reliability(site_id: int, start: str | None = None,
+                     end: str | None = None) -> dict:
     """Longest-lull reliability for one site.
 
     Values must match db/reliability.sql, which stays the oracle -- it
@@ -104,4 +105,4 @@ def site_reliability(site_id: int) -> dict:
         cur.execute("SELECT 1 FROM site WHERE id = %s", (site_id,))
         if cur.fetchone() is None:
             raise HTTPException(status_code=404, detail=f"no such site: {site_id}")
-        return reliability(cur, site_id)
+        return reliability(cur, site_id, start, end)

@@ -48,15 +48,17 @@ WITH win AS MATERIALIZED (
            count(*)     OVER w AS n
     FROM hourly_cf
     WHERE site_id = %(site_id)s
+      AND (%(start)s::date IS NULL OR hour >= (%(start)s::date AT TIME ZONE %(tz)s))
+      AND (%(end)s::date   IS NULL OR hour <  ((%(end)s::date + 1) AT TIME ZONE %(tz)s))
     WINDOW w AS (ORDER BY hour ROWS BETWEEN {_HOURS_24} PRECEDING AND CURRENT ROW)
 )
-(SELECT 'pv'     AS resource, pv     AS cf, hour FROM win WHERE n = {_HOURS_24 + 1}
+(SELECT 'pv'     AS resource, pv     AS cf, hour AT TIME ZONE %(tz)s AS at FROM win WHERE n = {_HOURS_24 + 1}
    ORDER BY pv     LIMIT 1)
 UNION ALL
-(SELECT 'wind',   wind,   hour FROM win WHERE n = {_HOURS_24 + 1}
+(SELECT 'wind',   wind,   hour AT TIME ZONE %(tz)s FROM win WHERE n = {_HOURS_24 + 1}
    ORDER BY wind   LIMIT 1)
 UNION ALL
-(SELECT 'hybrid', (pv + wind) / 2, hour FROM win WHERE n = {_HOURS_24 + 1}
+(SELECT 'hybrid', (pv + wind) / 2, hour AT TIME ZONE %(tz)s FROM win WHERE n = {_HOURS_24 + 1}
    ORDER BY (pv + wind) / 2 LIMIT 1)
 """
 
@@ -68,15 +70,17 @@ WITH win AS MATERIALIZED (
            count(*)     OVER w AS n
     FROM daily_cf
     WHERE site_id = %(site_id)s
+      AND (%(start)s::date IS NULL OR day >= (%(start)s::date AT TIME ZONE %(tz)s))
+      AND (%(end)s::date   IS NULL OR day <  ((%(end)s::date + 1) AT TIME ZONE %(tz)s))
     WINDOW w AS (ORDER BY day ROWS BETWEEN {_DAYS_7} PRECEDING AND CURRENT ROW)
 )
-(SELECT 'pv'     AS resource, pv     AS cf, day FROM win WHERE n = {_DAYS_7 + 1}
+(SELECT 'pv'     AS resource, pv     AS cf, (day AT TIME ZONE %(tz)s)::date AS at FROM win WHERE n = {_DAYS_7 + 1}
    ORDER BY pv     LIMIT 1)
 UNION ALL
-(SELECT 'wind',   wind,   day FROM win WHERE n = {_DAYS_7 + 1}
+(SELECT 'wind',   wind,   (day AT TIME ZONE %(tz)s)::date FROM win WHERE n = {_DAYS_7 + 1}
    ORDER BY wind   LIMIT 1)
 UNION ALL
-(SELECT 'hybrid', (pv + wind) / 2, day FROM win WHERE n = {_DAYS_7 + 1}
+(SELECT 'hybrid', (pv + wind) / 2, (day AT TIME ZONE %(tz)s)::date FROM win WHERE n = {_DAYS_7 + 1}
    ORDER BY (pv + wind) / 2 LIMIT 1)
 """
 
@@ -88,14 +92,17 @@ UNION ALL
 # The year is the LOCAL year: `AT TIME ZONE` before `extract`, or the
 # server's UTC pulls 1 January into the previous year (docs/adr/0007).
 HOURS_BELOW = f"""
-SELECT avg(pv_daylight)::float8 AS pv_daylight,
-       avg(wind_hours)::float8  AS wind
+SELECT sum(pv_daylight)::float8 AS pv_total,
+       sum(wind_hours)::float8  AS wind_total,
+       count(*)                 AS year_buckets
 FROM (
     SELECT extract(year FROM (hour AT TIME ZONE %(tz)s))              AS yr,
            count(*) FILTER (WHERE gti > 0 AND pv_cf < {LOW_OUTPUT})   AS pv_daylight,
            count(*) FILTER (WHERE wind_cf < {LOW_OUTPUT})             AS wind_hours
     FROM hourly_cf
     WHERE site_id = %(site_id)s
+      AND (%(start)s::date IS NULL OR hour >= (%(start)s::date AT TIME ZONE %(tz)s))
+      AND (%(end)s::date   IS NULL OR hour <  ((%(end)s::date + 1) AT TIME ZONE %(tz)s))
     GROUP BY yr
 ) yearly
 """
@@ -114,22 +121,43 @@ FROM (
            avg(wind_cf) AS wind
     FROM daily_cf
     WHERE site_id = %(site_id)s
+      AND (%(start)s::date IS NULL OR day >= (%(start)s::date AT TIME ZONE %(tz)s))
+      AND (%(end)s::date   IS NULL OR day <  ((%(end)s::date + 1) AT TIME ZONE %(tz)s))
     GROUP BY yr
 ) a
 """
 
 
-def _lull(cur, query: str, site_id: int, span_before) -> dict:
+def _span_days(cur, site_id: int, start, end) -> int:
+    """How many local days the window actually covers, from the data."""
+    cur.execute(
+        """
+        SELECT count(*) AS days
+        FROM daily_cf
+        WHERE site_id = %(site_id)s
+          AND (%(start)s::date IS NULL OR day >= (%(start)s::date AT TIME ZONE %(tz)s))
+          AND (%(end)s::date   IS NULL OR day <  ((%(end)s::date + 1) AT TIME ZONE %(tz)s))
+        """,
+        {"site_id": site_id, "start": start, "end": end, "tz": SITE_TIMEZONE},
+    )
+    return cur.fetchone()["days"]
+
+
+def _lull(cur, query: str, site_id: int, span_before, start, end) -> dict:
     """Run one worst-window query and shape it as {resource: {cf, start}}.
 
     The window runs from N rows BEFORE the returned row to that row, so the
     row's own timestamp is where the window ENDS. The chart shades from the
     start, so subtract the span.
     """
-    cur.execute(query, {"site_id": site_id})
+    cur.execute(query, {"site_id": site_id, "tz": SITE_TIMEZONE,
+                        "start": start, "end": end})
     out = {}
     for row in cur.fetchall():
-        end = row["hour"] if "hour" in row else row["day"]
+        # Already converted to local in SQL, so naive -- isoformat gives
+        # '2020-05-03' for a day window and '2020-05-03T14:00:00' for an
+        # hour one, both in the site's own calendar.
+        end = row["at"]
         out[row["resource"]] = {
             "cf": round(float(row["cf"]), 4),
             "start": (end - span_before).isoformat(),
@@ -138,26 +166,49 @@ def _lull(cur, query: str, site_id: int, span_before) -> dict:
     return out
 
 
-def reliability(cur, site_id: int) -> dict:
-    params = {"site_id": site_id, "tz": SITE_TIMEZONE}
+def reliability(cur, site_id: int, start=None, end=None) -> dict:
+    """Metrics over a window of local dates; the whole span when unbounded.
 
-    worst_24h = _lull(cur, WORST_24H, site_id, timedelta(hours=_HOURS_24))
-    worst_7d = _lull(cur, WORST_7D, site_id, timedelta(days=_DAYS_7))
+    Two metrics do not survive an arbitrary window and say so rather than
+    reporting something misleading:
+
+    - **P50/P90 annual** needs at least two complete local years. Ten years
+      of data does not make a three-month window into a distribution.
+    - **Hours below 10%** is normalised per year only when the window spans
+      a year or more. Below that it is the raw count for the window --
+      extrapolating a winter quarter to a year would overstate wind lulls
+      badly, because that is exactly when wind lulls cluster.
+    """
+    params = {"site_id": site_id, "tz": SITE_TIMEZONE, "start": start, "end": end}
+    days = _span_days(cur, site_id, start, end)
+
+    worst_24h = (_lull(cur, WORST_24H, site_id, timedelta(hours=_HOURS_24), start, end)
+                 if days >= 1 else {})
+    worst_7d = (_lull(cur, WORST_7D, site_id, timedelta(days=_DAYS_7), start, end)
+                if days >= _DAYS_7 + 1 else {})
 
     cur.execute(HOURS_BELOW, params)
     hours = cur.fetchone()
+    per_year = days >= 365
+    scale = (365.25 / days) if per_year and days else 1.0
 
     cur.execute(ANNUAL, params)
     annual = cur.fetchone()
+    # count(*) here is complete-ish local years in the window; a partial year
+    # at either end still counts as a bucket, so two is the floor at which a
+    # percentile means anything at all.
+    has_annual = (annual["years"] or 0) >= 2 and days >= 2 * 365
 
     return {
         "site_id": site_id,
         "low_output_threshold": LOW_OUTPUT,
+        "window": {"start": start, "end": end, "days": days},
         "worst_24h": worst_24h,
         "worst_7d": worst_7d,
         "hours_below_10pct": {
-            "pv_daylight": round(hours["pv_daylight"]),
-            "wind": round(hours["wind"]),
+            "pv_daylight": round((hours["pv_total"] or 0) * scale),
+            "wind": round((hours["wind_total"] or 0) * scale),
+            "per": "year" if per_year else "window",
         },
         "annual": {
             "pv": {"p50": round(annual["pv_p50"], 4),
@@ -165,5 +216,5 @@ def reliability(cur, site_id: int) -> dict:
             "wind": {"p50": round(annual["wind_p50"], 4),
                      "p90": round(annual["wind_p90"], 4)},
             "years": annual["years"],
-        },
+        } if has_annual else None,
     }
